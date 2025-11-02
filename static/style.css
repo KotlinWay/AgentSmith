@@ -194,6 +194,7 @@ body {
     body {
         padding: 0;
         height: 100vh;
+        -webkit-text-size-adjust: 100%;
     }
 
     .container {
@@ -204,65 +205,89 @@ body {
     }
 
     .chat-header {
-        padding: 12px 16px;
+        padding: 16px 20px;
+        min-height: 60px;
     }
 
     .chat-header h1 {
-        font-size: 18px;
+        font-size: 22px;
         font-weight: 600;
     }
 
     .clear-btn {
-        padding: 6px 12px;
-        font-size: 12px;
+        padding: 10px 16px;
+        font-size: 15px;
+        min-height: 40px;
     }
 
     .chat-messages {
-        padding: 12px 16px;
+        padding: 16px 20px;
     }
 
     .message-content {
         max-width: 85%;
-        padding: 10px 14px;
-        font-size: 14px;
+        padding: 14px 18px;
+        font-size: 16px;
+        line-height: 1.5;
     }
 
     .chat-input-container {
-        padding: 12px 16px;
-        gap: 8px;
+        padding: 16px 20px;
+        gap: 10px;
     }
 
     #messageInput {
-        padding: 10px 14px;
-        font-size: 14px;
+        padding: 14px 18px;
+        font-size: 16px;
+        min-height: 48px;
+        -webkit-appearance: none;
+        border-radius: 24px;
     }
 
     #sendBtn {
-        padding: 10px 20px;
-        font-size: 14px;
+        padding: 14px 24px;
+        font-size: 16px;
+        min-height: 48px;
         white-space: nowrap;
+        -webkit-tap-highlight-color: transparent;
     }
 }
 
 /* Для очень маленьких экранов */
 @media (max-width: 480px) {
+    .chat-header {
+        padding: 14px 16px;
+    }
+
     .chat-header h1 {
-        font-size: 16px;
+        font-size: 20px;
+    }
+
+    .clear-btn {
+        padding: 8px 14px;
+        font-size: 14px;
     }
 
     .message-content {
         max-width: 90%;
-        padding: 8px 12px;
-        font-size: 13px;
+        padding: 12px 16px;
+        font-size: 15px;
+    }
+
+    .chat-input-container {
+        padding: 14px 16px;
     }
 
     #messageInput {
-        font-size: 13px;
+        padding: 12px 16px;
+        font-size: 15px;
+        min-height: 44px;
     }
 
     #sendBtn {
-        padding: 10px 16px;
-        font-size: 13px;
+        padding: 12px 20px;
+        font-size: 15px;
+        min-height: 44px;
     }
 }
 
