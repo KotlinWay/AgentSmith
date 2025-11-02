@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AgentSmith Chat</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <div class="chat-header">
+            <h1>🎬 AgentSmith - Критик фильмов</h1>
+            <button id="clearBtn" class="clear-btn">Очистить</button>
+        </div>
+        <div class="chat-messages" id="chatMessages">
+            <div class="message assistant">
+                <div class="message-content">
+                    Привет! Я AgentSmith, твой искушенный критик фильмов. Что хочешь обсудить?
+                </div>
+            </div>
+        </div>
+        <div class="chat-input-container">
+            <input type="text" id="messageInput" placeholder="Введите ваше сообщение..." autocomplete="off">
+            <button id="sendBtn">Отправить</button>
+        </div>
+    </div>
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
+
