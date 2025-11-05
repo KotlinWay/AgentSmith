@@ -91,10 +91,8 @@ async function clearHistory() {
         
         chatMessages.innerHTML = `
             <div class="message assistant">
-                <div class="message-content">
-                    Привет! Я AgentSmith, твой искушенный критик фильмов. Что хочешь обсудить?
+                <div class="message-content">Привет! Я агент Смит, твой личный справочник по фильмам. По какому хочешь получить информацию?</div>
                 </div>
-            </div>
         `;
     } catch (error) {
         console.error('Ошибка при очистке:', error);

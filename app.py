@@ -2,6 +2,7 @@ from flask import Flask, render_template, request, jsonify
 import requests
 import json
 import os
+import re
 
 app = Flask(__name__)
 
@@ -19,58 +20,165 @@ config = load_config()
 chat_history = []
 
 
+JSON_SCHEMA_INSTRUCTION = (
+    "Ты — лучший в мире кинокритик. Отвечай ТОЛЬКО валидным JSON без каких-либо пояснений, текста до/после и БЕЗ обрамляющих кавычек. "
+    "Верни только JSON-объект, отформатированный с отступом 2 пробела. Если вопрос не о фильмах — верни JSON с полем 'error' и описанием ошибки. "
+    "Структура данных для фильмов (рекомендуемая):\n"
+    "{\n"
+    "  \"$schema\": \"https://json-schema.org/draft/2020-12/schema\",\n"
+    "  \"type\": \"object\",\n"
+    "  \"properties\": {\n"
+    "    \"actors\": {\n"
+    "      \"type\": \"array\",\n"
+    "      \"items\": {\n"
+    "        \"type\": \"object\",\n"
+    "        \"properties\": {\n"
+    "          \"lastName\": { \"type\": \"string\" },\n"
+    "          \"firstName\": { \"type\": \"string\" }\n"
+    "        }\n"
+    "      }\n"
+    "    },\n"
+    "    \"release\": { \"type\": \"string\" },\n"
+    "    \"rating\": { \"type\": \"number\" },\n"
+    "    \"producer\": { \"type\": \"string\" },\n"
+    "    \"description\": { \"type\": \"string\" },\n"
+    "    \"title\": { \"type\": \"string\" },\n"
+    "    \"error\": { \"type\": \"string\" }\n"
+    "  }\n"
+    "}\n"
+)
+
+
 def get_agent_response(user_message):
-    """Получает ответ от Yandex GPT агента"""
-    url = "https://llm.api.cloud.yandex.net/foundationModels/v1/completion"
+    """Получает ответ от Yandex GPT агента в строгом JSON-формате"""
+    # Если указан agent_id — используем Agents API (строгая схема применяется на стороне Агента)
+    use_agents_api = bool(config.get('agent_id'))
+    url = (
+        "https://llm.api.cloud.yandex.net/agents/v1/completions"
+        if use_agents_api
+        else "https://llm.api.cloud.yandex.net/foundationModels/v1/completion"
+    )
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Api-Key {config['api_key']}"
     }
+
+    def empty_movie_object():
+        return {
+            "actors": [],
+            "release": "",
+            "rating": 0,
+            "producer": "",
+            "description": "",
+            "title": ""
+        }
     
     # Формируем историю сообщений
-    messages = [
-        {
-            "role": "system",
-            "text": "Ты искушенный критик фильмов"
-        }
-    ]
+    messages = []
+    if not use_agents_api:
+        # Для raw completion оставляем системную инструкцию и few-shot
+        messages = [
+            {
+                "role": "system",
+                "text": JSON_SCHEMA_INSTRUCTION
+            },
+            {
+                "role": "user",
+                "text": "Пример запроса: Расскажи о фильме Матрица"
+            },
+            {
+                "role": "assistant",
+                "text": (
+                    "{\n"
+                    "  \"actors\": [\n"
+                    "    { \"lastName\": \"Ривз\", \"firstName\": \"Киану\" }\n"
+                    "  ],\n"
+                    "  \"release\": \"1999\",\n"
+                    "  \"rating\": 8.7,\n"
+                    "  \"producer\": \"Джоэл Сильвер\",\n"
+                    "  \"description\": \"Пример форматированного JSON без лишнего текста.\",\n"
+                    "  \"title\": \"Матрица\"\n"
+                    "}"
+                )
+            }
+        ]
     
     # Добавляем историю диалога
-    for msg in chat_history[-10:]:  # Берем последние 10 сообщений
+    for msg in chat_history[-10:]:
         messages.append(msg)
-    
+
     # Добавляем новое сообщение пользователя
-    messages.append({
-        "role": "user",
-        "text": user_message
-    })
+    messages.append({"role": "user", "text": user_message})
     
-    prompt = {
-        "modelUri": f"gpt://{config['catalog_id']}/yandexgpt-lite/latest",
-        "completionOptions": {
-            "stream": False,
-            "temperature": 0.6,
-            "maxTokens": "2000"
-        },
-        "messages": messages
-    }
+    if use_agents_api:
+        # Вызов через агент: строгая схема и все настройки из консоли агента
+        prompt = {
+            "agentId": config["agent_id"],
+            "messages": messages,
+            "completionOptions": {
+                "stream": False
+            }
+        }
+    else:
+        # Прямой вызов модели
+        prompt = {
+            "modelUri": f"gpt://{config['catalog_id']}/yandexgpt-lite/latest",
+            "completionOptions": {
+                "stream": False,
+                "temperature": 0.0,
+                "maxTokens": 2000
+            },
+            "messages": messages
+        }
     
     try:
         response = requests.post(url, headers=headers, json=prompt)
         response.raise_for_status()
         result = response.json()
-        
+
         # Извлекаем текст ответа
         if "result" in result and "alternatives" in result["result"]:
             assistant_text = result["result"]["alternatives"][0]["message"]["text"]
-            return assistant_text
+
+            # Пытаемся гарантировать строгий JSON: парсим, расковыриваем кавычки, форматируем
+            raw = assistant_text.strip()
+            parsed = None
+            # 1) прямая попытка распарсить
+            try:
+                parsed = json.loads(raw)
+            except json.JSONDecodeError:
+                parsed = None
+
+            # 2) если это строка с внутри-JSON ("{...}") — распарсим второй раз
+            if isinstance(parsed, str):
+                try:
+                    parsed = json.loads(parsed)
+                except json.JSONDecodeError:
+                    parsed = None
+
+            # 3) если всё ещё None — попробуем вырезать самый похожий на JSON блок
+            if parsed is None:
+                match = re.search(r"\{[\s\S]*\}", raw)
+                if match:
+                    candidate = match.group(0)
+                    try:
+                        parsed = json.loads(candidate)
+                    except json.JSONDecodeError:
+                        parsed = None
+
+            if parsed is None:
+                # жёсткий фолбэк: пустые поля
+                return json.dumps(empty_movie_object(), ensure_ascii=False, indent=2)
+
+            # Успешно: вернём красиво отформатированный JSON строкой (для фронта)
+            return json.dumps(parsed, ensure_ascii=False, indent=2)
         else:
-            return "Ошибка: неожиданный формат ответа от API"
+            return json.dumps(empty_movie_object(), ensure_ascii=False, indent=2)
             
-    except requests.exceptions.RequestException as e:
-        return f"Ошибка при запросе к API: {str(e)}"
-    except Exception as e:
-        return f"Ошибка: {str(e)}"
+    except requests.exceptions.RequestException:
+        return json.dumps(empty_movie_object(), ensure_ascii=False, indent=2)
+    except Exception:
+        return json.dumps(empty_movie_object(), ensure_ascii=False, indent=2)
 
 
 @app.route('/')
