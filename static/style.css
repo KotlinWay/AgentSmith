@@ -33,10 +33,42 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
 }
 
 .chat-header h1 {
     font-size: 24px;
+    font-weight: 600;
+}
+
+.mode-switch {
+    display: flex;
+    gap: 8px;
+    background: rgba(0, 0, 0, 0.2);
+    padding: 4px;
+    border-radius: 10px;
+}
+
+.mode-btn {
+    background: transparent;
+    border: none;
+    color: rgba(255, 255, 255, 0.7);
+    padding: 8px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.3s ease;
+}
+
+.mode-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+}
+
+.mode-btn.active {
+    background: rgba(255, 255, 255, 0.3);
+    color: white;
     font-weight: 600;
 }
 
@@ -381,6 +413,18 @@ body {
         padding: 10px 16px;
         font-size: 15px;
         min-height: 40px;
+    }
+
+    .mode-switch {
+        order: 1;
+        width: 100%;
+        margin-top: 10px;
+    }
+
+    .mode-btn {
+        flex: 1;
+        padding: 10px 12px;
+        font-size: 14px;
     }
 
     .chat-messages {

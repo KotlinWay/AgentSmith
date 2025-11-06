@@ -2,6 +2,11 @@ const chatMessages = document.getElementById('chatMessages');
 const messageInput = document.getElementById('messageInput');
 const sendBtn = document.getElementById('sendBtn');
 const clearBtn = document.getElementById('clearBtn');
+const infoModeBtn = document.getElementById('infoModeBtn');
+const recommendModeBtn = document.getElementById('recommendModeBtn');
+
+// Текущий режим работы: 'info' или 'recommend'
+let currentMode = 'info';
 
 function addMessage(text, isUser) {
     const messageDiv = document.createElement('div');
@@ -182,28 +187,31 @@ function removeLoading() {
 async function sendMessage() {
     const message = messageInput.value.trim();
     if (!message) return;
-    
+
     // Добавляем сообщение пользователя
     addMessage(message, true);
     messageInput.value = '';
     sendBtn.disabled = true;
-    
+
     // Показываем индикатор загрузки
     showLoading();
-    
+
     try {
-        const response = await fetch('/chat', {
+        // Выбираем endpoint в зависимости от режима
+        const endpoint = currentMode === 'recommend' ? '/recommend' : '/chat';
+
+        const response = await fetch(endpoint, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({ message: message })
         });
-        
+
         const data = await response.json();
-        
+
         removeLoading();
-        
+
         if (response.ok) {
             addMessage(data.response, false);
         } else {
@@ -218,22 +226,64 @@ async function sendMessage() {
     }
 }
 
+function switchMode(mode) {
+    currentMode = mode;
+
+    // Обновляем активную кнопку
+    if (mode === 'info') {
+        infoModeBtn.classList.add('active');
+        recommendModeBtn.classList.remove('active');
+    } else {
+        infoModeBtn.classList.remove('active');
+        recommendModeBtn.classList.add('active');
+    }
+
+    // Очищаем чат и показываем приветственное сообщение
+    if (mode === 'info') {
+        chatMessages.innerHTML = `
+            <div class="message assistant">
+                <div class="message-content">Привет! Я агент Смит, твой справочник по фильмам. Введи название фильма.</div>
+            </div>
+        `;
+        // Очищаем историю на сервере
+        fetch('/clear', { method: 'POST' }).catch(console.error);
+    } else {
+        chatMessages.innerHTML = `
+            <div class="message assistant">
+                <div class="message-content">Привет! Я помогу тебе подобрать идеальный фильм. Расскажи, что тебе нравится, в какой компании будешь смотреть и какое у тебя настроение? 🎬</div>
+            </div>
+        `;
+        // Очищаем историю рекомендаций на сервере
+        fetch('/clear_recommendations', { method: 'POST' }).catch(console.error);
+    }
+}
+
 async function clearHistory() {
     if (!confirm('Очистить историю чата?')) return;
-    
+
     try {
-        await fetch('/clear', {
+        const endpoint = currentMode === 'recommend' ? '/clear_recommendations' : '/clear';
+        await fetch(endpoint, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             }
         });
-        
-        chatMessages.innerHTML = `
-            <div class="message assistant">
-                <div class="message-content">Привет! Я агент Смит, твой личный справочник по фильмам. По какому хочешь получить информацию?</div>
+
+        // Показываем приветственное сообщение в зависимости от режима
+        if (currentMode === 'info') {
+            chatMessages.innerHTML = `
+                <div class="message assistant">
+                    <div class="message-content">Привет! Я агент Смит, твой справочник по фильмам. Введи название фильма.</div>
                 </div>
-        `;
+            `;
+        } else {
+            chatMessages.innerHTML = `
+                <div class="message assistant">
+                    <div class="message-content">Привет! Я помогу тебе подобрать идеальный фильм. Расскажи, что тебе нравится, в какой компании будешь смотреть и какое у тебя настроение? 🎬</div>
+                </div>
+            `;
+        }
     } catch (error) {
         console.error('Ошибка при очистке:', error);
     }
@@ -242,6 +292,8 @@ async function clearHistory() {
 // Обработчики событий
 sendBtn.addEventListener('click', sendMessage);
 clearBtn.addEventListener('click', clearHistory);
+infoModeBtn.addEventListener('click', () => switchMode('info'));
+recommendModeBtn.addEventListener('click', () => switchMode('recommend'));
 
 messageInput.addEventListener('keypress', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {

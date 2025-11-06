@@ -18,6 +18,46 @@ config = load_config()
 
 # История диалога
 chat_history = []
+recommendation_history = []
+
+
+RECOMMENDATION_AGENT_PROMPT = """
+Ты умный агент-советник по фильмам. Твоя задача - помочь пользователю найти идеальный фильм через диалог.
+
+ВАЖНО: Ты работаешь в двух режимах:
+
+РЕЖИМ 1 - СБОР ИНФОРМАЦИИ (обычный текст):
+- Веди естественный, дружелюбный диалог с пользователем
+- Задавай вопросы о его предпочтениях, настроении, компании
+- Интересуйся жанрами, которые он любит или не любит
+- Узнай, в какой обстановке он будет смотреть фильм (один, с друзьями, с семьей, на романтическом свидании)
+- Учитывай его текущее настроение
+- Сам решай, когда у тебя достаточно информации для качественной рекомендации
+
+РЕЖИМ 2 - ФИНАЛЬНАЯ РЕКОМЕНДАЦИЯ (только JSON):
+- Когда ты считаешь, что собрал достаточно информации, переходи в режим рекомендации
+- Верни ТОЛЬКО валидный JSON с рекомендацией фильма (без пояснений, текста до/после, БЕЗ обрамляющих кавычек)
+- Структура JSON должна быть строго такой:
+{
+  "title": "Название фильма",
+  "release": "Год выпуска",
+  "rating": число_рейтинг,
+  "producer": "Продюсер",
+  "actors": [
+    {"lastName": "Фамилия", "firstName": "Имя"}
+  ],
+  "description": "Детальное объяснение, почему именно этот фильм идеально подходит пользователю с учетом всех его предпочтений, настроения и компании"
+}
+
+Как определить, что информации достаточно:
+- Ты знаешь предпочитаемые жанры или настроение
+- Ты понимаешь контекст просмотра (один, с друзьями, с семьей)
+- Пользователь дал достаточно деталей для качественной рекомендации
+- Обычно 2-4 вопроса достаточно, но можешь задать больше, если чувствуешь, что нужно
+
+Когда начинаешь рекомендацию, подбирай фильм, который действительно соответствует ВСЕМ предпочтениям пользователя.
+Твой JSON должен быть идеально отформатирован с отступом 2 пробела.
+"""
 
 
 JSON_SCHEMA_INSTRUCTION = (
@@ -47,6 +87,70 @@ JSON_SCHEMA_INSTRUCTION = (
     "  }\n"
     "}\n"
 )
+
+
+def get_recommendation_agent_response(user_message):
+    """Получает ответ от агента-рекомендатора фильмов"""
+    use_agents_api = bool(config.get('agent_id'))
+    url = (
+        "https://llm.api.cloud.yandex.net/agents/v1/completions"
+        if use_agents_api
+        else "https://llm.api.cloud.yandex.net/foundationModels/v1/completion"
+    )
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Api-Key {config['api_key']}"
+    }
+
+    # Формируем историю сообщений
+    messages = [
+        {
+            "role": "system",
+            "text": RECOMMENDATION_AGENT_PROMPT
+        }
+    ]
+
+    # Добавляем историю диалога
+    for msg in recommendation_history[-10:]:
+        messages.append(msg)
+
+    # Добавляем новое сообщение пользователя
+    messages.append({"role": "user", "text": user_message})
+
+    if use_agents_api:
+        prompt = {
+            "agentId": config["agent_id"],
+            "messages": messages,
+            "completionOptions": {
+                "stream": False
+            }
+        }
+    else:
+        prompt = {
+            "modelUri": f"gpt://{config['catalog_id']}/yandexgpt/latest",
+            "completionOptions": {
+                "stream": False,
+                "temperature": 0.7,
+                "maxTokens": 2000
+            },
+            "messages": messages
+        }
+
+    try:
+        response = requests.post(url, headers=headers, json=prompt)
+        response.raise_for_status()
+        result = response.json()
+
+        if "result" in result and "alternatives" in result["result"]:
+            assistant_text = result["result"]["alternatives"][0]["message"]["text"]
+            return assistant_text.strip()
+        else:
+            return "Извините, произошла ошибка при получении ответа."
+
+    except requests.exceptions.RequestException as e:
+        return f"Ошибка подключения к API: {str(e)}"
+    except Exception as e:
+        return f"Произошла ошибка: {str(e)}"
 
 
 def get_agent_response(user_message):
@@ -216,11 +320,57 @@ def chat():
     })
 
 
+@app.route('/recommend', methods=['POST'])
+def recommend():
+    """Обработка запросов к агенту-рекомендатору"""
+    data = request.json
+    user_message = data.get('message', '').strip()
+
+    if not user_message:
+        return jsonify({'error': 'Пустое сообщение'}), 400
+
+    # Сохраняем сообщение пользователя в историю рекомендаций
+    recommendation_history.append({
+        "role": "user",
+        "text": user_message
+    })
+
+    # Получаем ответ от агента-рекомендатора
+    assistant_response = get_recommendation_agent_response(user_message)
+
+    # Сохраняем ответ агента в историю
+    recommendation_history.append({
+        "role": "assistant",
+        "text": assistant_response
+    })
+
+    # Проверяем, является ли ответ JSON (финальная рекомендация)
+    try:
+        # Пытаемся распарсить как JSON
+        json.loads(assistant_response)
+        is_final_recommendation = True
+    except json.JSONDecodeError:
+        is_final_recommendation = False
+
+    return jsonify({
+        'response': assistant_response,
+        'is_final': is_final_recommendation
+    })
+
+
 @app.route('/clear', methods=['POST'])
 def clear_history():
     """Очистка истории чата"""
     global chat_history
     chat_history = []
+    return jsonify({'status': 'ok'})
+
+
+@app.route('/clear_recommendations', methods=['POST'])
+def clear_recommendations():
+    """Очистка истории рекомендаций"""
+    global recommendation_history
+    recommendation_history = []
     return jsonify({'status': 'ok'})
 
 
