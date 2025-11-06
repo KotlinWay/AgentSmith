@@ -40,41 +40,9 @@ function formatJSONResponse(data, rawJSON) {
     if (data.error) {
         html += `<div class="json-error">⚠️ ${escapeHtml(data.error)}</div>`;
     } else {
-        // Красивое отображение данных
+        // Универсальное отображение данных
         html += '<div class="json-data">';
-        
-        if (data.title) {
-            html += `<div class="json-field"><span class="json-label">🎬 Фильм:</span> <span class="json-value">${escapeHtml(data.title)}</span></div>`;
-        }
-        
-        if (data.release) {
-            html += `<div class="json-field"><span class="json-label">📅 Год:</span> <span class="json-value">${escapeHtml(data.release)}</span></div>`;
-        }
-        
-        if (data.rating) {
-            html += `<div class="json-field"><span class="json-label">⭐ Рейтинг:</span> <span class="json-value">${escapeHtml(data.rating)}</span></div>`;
-        }
-        
-        if (data.producer) {
-            html += `<div class="json-field"><span class="json-label">🎭 Режиссёр:</span> <span class="json-value">${escapeHtml(data.producer)}</span></div>`;
-        }
-        
-        if (data.actors && Array.isArray(data.actors) && data.actors.length > 0) {
-            html += '<div class="json-field"><span class="json-label">👥 Актёры:</span> <span class="json-value">';
-            const actorsList = data.actors.map(actor => {
-                const name = actor.firstName && actor.lastName 
-                    ? `${escapeHtml(actor.firstName)} ${escapeHtml(actor.lastName)}`
-                    : (actor.firstName || actor.lastName || '');
-                return name;
-            }).filter(Boolean);
-            html += actorsList.join(', ') || '-';
-            html += '</span></div>';
-        }
-        
-        if (data.description) {
-            html += `<div class="json-field json-description"><span class="json-label">📝 Описание:</span> <span class="json-value">${escapeHtml(data.description)}</span></div>`;
-        }
-        
+        html += formatJSONValue(data, '');
         html += '</div>';
     }
     
@@ -88,6 +56,84 @@ function formatJSONResponse(data, rawJSON) {
     
     html += '</div>';
     return html;
+}
+
+function formatJSONValue(value, key = '') {
+    if (value === null) {
+        return `<div class="json-field"><span class="json-label">${formatKey(key)}:</span> <span class="json-value json-null">null</span></div>`;
+    }
+    
+    if (Array.isArray(value)) {
+        if (value.length === 0) {
+            return `<div class="json-field"><span class="json-label">${formatKey(key)}:</span> <span class="json-value json-empty">(пусто)</span></div>`;
+        }
+        let html = `<div class="json-field json-array"><span class="json-label">${formatKey(key)}:</span> <div class="json-array-items">`;
+        value.forEach((item, index) => {
+            html += `<div class="json-array-item">`;
+            if (typeof item === 'object' && item !== null) {
+                // Для объектов в массиве не показываем ключ, только содержимое
+                const objKeys = Object.keys(item);
+                if (objKeys.length === 0) {
+                    html += `<span class="json-value json-empty">(пусто)</span>`;
+                } else {
+                    objKeys.forEach(k => {
+                        html += formatJSONValue(item[k], k);
+                    });
+                }
+            } else {
+                html += `<span class="json-value">${escapeHtml(String(item))}</span>`;
+            }
+            html += `</div>`;
+        });
+        html += '</div></div>';
+        return html;
+    }
+    
+    if (typeof value === 'object') {
+        const keys = Object.keys(value);
+        if (keys.length === 0) {
+            return `<div class="json-field"><span class="json-label">${formatKey(key)}:</span> <span class="json-value json-empty">(пусто)</span></div>`;
+        }
+        let html = key ? `<div class="json-object"><div class="json-object-label">${formatKey(key)}:</div><div class="json-object-content">` : '';
+        keys.forEach(k => {
+            html += formatJSONValue(value[k], k);
+        });
+        html += key ? '</div></div>' : '';
+        return html;
+    }
+    
+    // Простые типы
+    const displayValue = typeof value === 'boolean' 
+        ? (value ? '✓ Да' : '✗ Нет')
+        : escapeHtml(String(value));
+    
+    return `<div class="json-field"><span class="json-label">${formatKey(key)}:</span> <span class="json-value">${displayValue}</span></div>`;
+}
+
+function formatKey(key) {
+    if (!key) return '';
+    
+    // Эмодзи для известных полей
+    const emojiMap = {
+        'title': '🎬',
+        'release': '📅',
+        'rating': '⭐',
+        'producer': '🎭',
+        'director': '🎭',
+        'actors': '👥',
+        'description': '📝',
+        'error': '⚠️',
+        'name': '👤',
+        'year': '📅',
+        'genre': '🎞️',
+        'duration': '⏱️',
+        'country': '🌍',
+        'language': '🗣️'
+    };
+    
+    const emoji = emojiMap[key.toLowerCase()] || '';
+    const formattedKey = key.charAt(0).toUpperCase() + key.slice(1);
+    return emoji ? `${emoji} ${formattedKey}` : formattedKey;
 }
 
 function escapeHtml(text) {

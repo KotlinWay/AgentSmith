@@ -150,6 +150,65 @@ body {
     padding-top: 4px;
 }
 
+.json-object {
+    margin-left: 0;
+    margin-top: 8px;
+    padding-left: 12px;
+    border-left: 2px solid #e0e0e0;
+}
+
+.json-object-label {
+    font-weight: 600;
+    color: #667eea;
+    margin-bottom: 6px;
+}
+
+.json-object-content {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-left: 8px;
+}
+
+.json-array {
+    flex-direction: column;
+    gap: 6px;
+}
+
+.json-array-items {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-left: 8px;
+    margin-top: 6px;
+}
+
+.json-array-item {
+    padding: 10px 14px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    border-left: 3px solid #667eea;
+    margin-bottom: 4px;
+}
+
+.json-array-item .json-field {
+    margin-bottom: 4px;
+}
+
+.json-array-item .json-field:last-child {
+    margin-bottom: 0;
+}
+
+.json-null {
+    color: #999;
+    font-style: italic;
+}
+
+.json-empty {
+    color: #999;
+    font-style: italic;
+}
+
 .json-error {
     padding: 12px;
     background: #fff3cd;
