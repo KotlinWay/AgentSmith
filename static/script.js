@@ -11,31 +11,149 @@ let currentMode = 'info';
 function addMessage(text, isUser) {
     const messageDiv = document.createElement('div');
     messageDiv.className = `message ${isUser ? 'user' : 'assistant'}`;
-    
+
     const contentDiv = document.createElement('div');
     contentDiv.className = 'message-content';
-    
+
     if (isUser) {
         contentDiv.textContent = text;
     } else {
         // Пытаемся распарсить JSON
         try {
             const jsonData = JSON.parse(text);
-            contentDiv.innerHTML = formatJSONResponse(jsonData, text);
+
+            // Проверяем, является ли это выбором фильмов
+            if (jsonData.type === 'movie_selection' && jsonData.movies) {
+                contentDiv.innerHTML = formatMovieSelection(jsonData);
+            } else {
+                contentDiv.innerHTML = formatJSONResponse(jsonData, text);
+            }
         } catch (e) {
             // Если не JSON - выводим как обычный текст
             contentDiv.textContent = text;
         }
     }
-    
+
     messageDiv.appendChild(contentDiv);
     chatMessages.appendChild(messageDiv);
-    
+
     // Прокрутка вниз
     chatMessages.scrollTop = chatMessages.scrollHeight;
-    
+
     // Инициализация спойлеров после добавления сообщения
     initSpoilers();
+}
+
+function formatMovieSelection(data) {
+    let html = '<div class="movie-selection">';
+
+    // Сообщение
+    if (data.message) {
+        html += `<p class="selection-message">${escapeHtml(data.message)}</p>`;
+    }
+
+    // Счетчик выбранных фильмов
+    html += '<div class="selection-counter">Выбрано: <span id="selectedCount">0</span> / 4</div>';
+
+    // Кнопки с фильмами
+    html += '<div class="movie-buttons">';
+    data.movies.forEach((movie, index) => {
+        html += `<button class="movie-btn" data-movie="${escapeHtml(movie)}" data-index="${index}">
+            ${escapeHtml(movie)}
+        </button>`;
+    });
+    html += '</div>';
+
+    // Кнопка подтверждения выбора
+    html += '<button class="confirm-selection-btn" id="confirmSelection" disabled>Подтвердить выбор</button>';
+
+    html += '</div>';
+
+    // Добавляем обработчики после рендера
+    setTimeout(() => {
+        initMovieSelection();
+    }, 100);
+
+    return html;
+}
+
+function initMovieSelection() {
+    const movieButtons = document.querySelectorAll('.movie-btn');
+    const confirmBtn = document.getElementById('confirmSelection');
+    const counterSpan = document.getElementById('selectedCount');
+    let selectedMovies = [];
+
+    movieButtons.forEach(btn => {
+        btn.addEventListener('click', function() {
+            const movieName = this.dataset.movie;
+
+            if (this.classList.contains('selected')) {
+                // Убираем выбор
+                this.classList.remove('selected');
+                selectedMovies = selectedMovies.filter(m => m !== movieName);
+            } else {
+                // Добавляем выбор, но не больше 4
+                if (selectedMovies.length < 4) {
+                    this.classList.add('selected');
+                    selectedMovies.push(movieName);
+                }
+            }
+
+            // Обновляем счетчик
+            counterSpan.textContent = selectedMovies.length;
+
+            // Активируем кнопку подтверждения, если выбрано ровно 4
+            if (selectedMovies.length === 4) {
+                confirmBtn.disabled = false;
+            } else {
+                confirmBtn.disabled = true;
+            }
+        });
+    });
+
+    if (confirmBtn && !confirmBtn.dataset.listenerAdded) {
+        confirmBtn.dataset.listenerAdded = 'true';
+        confirmBtn.addEventListener('click', async function() {
+            // Отключаем все кнопки
+            movieButtons.forEach(btn => btn.disabled = true);
+            confirmBtn.disabled = true;
+
+            // Формируем сообщение с выбранными фильмами
+            const message = `Я выбрал: ${selectedMovies.join(', ')}`;
+
+            // Добавляем сообщение пользователя
+            addMessage(message, true);
+
+            // Отправляем выбранные фильмы агенту
+            sendBtn.disabled = true;
+            showLoading();
+
+            try {
+                const response = await fetch('/recommend', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ message: message })
+                });
+
+                const data = await response.json();
+
+                removeLoading();
+
+                if (response.ok) {
+                    addMessage(data.response, false);
+                } else {
+                    addMessage(`Ошибка: ${data.error || 'Неизвестная ошибка'}`, false);
+                }
+            } catch (error) {
+                removeLoading();
+                addMessage(`Ошибка подключения: ${error.message}`, false);
+            } finally {
+                sendBtn.disabled = false;
+            }
+        });
+    }
 }
 
 function formatJSONResponse(data, rawJSON) {
