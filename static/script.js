@@ -2,35 +2,158 @@ const chatMessages = document.getElementById('chatMessages');
 const messageInput = document.getElementById('messageInput');
 const sendBtn = document.getElementById('sendBtn');
 const clearBtn = document.getElementById('clearBtn');
+const infoModeBtn = document.getElementById('infoModeBtn');
+const recommendModeBtn = document.getElementById('recommendModeBtn');
+
+// Текущий режим работы: 'info' или 'recommend'
+let currentMode = 'info';
 
 function addMessage(text, isUser) {
     const messageDiv = document.createElement('div');
     messageDiv.className = `message ${isUser ? 'user' : 'assistant'}`;
-    
+
     const contentDiv = document.createElement('div');
     contentDiv.className = 'message-content';
-    
+
     if (isUser) {
         contentDiv.textContent = text;
     } else {
         // Пытаемся распарсить JSON
         try {
             const jsonData = JSON.parse(text);
-            contentDiv.innerHTML = formatJSONResponse(jsonData, text);
+
+            // Проверяем, является ли это выбором фильмов
+            if (jsonData.type === 'movie_selection' && jsonData.movies) {
+                contentDiv.innerHTML = formatMovieSelection(jsonData);
+            } else {
+                contentDiv.innerHTML = formatJSONResponse(jsonData, text);
+            }
         } catch (e) {
             // Если не JSON - выводим как обычный текст
             contentDiv.textContent = text;
         }
     }
-    
+
     messageDiv.appendChild(contentDiv);
     chatMessages.appendChild(messageDiv);
-    
+
     // Прокрутка вниз
     chatMessages.scrollTop = chatMessages.scrollHeight;
-    
+
     // Инициализация спойлеров после добавления сообщения
     initSpoilers();
+}
+
+function formatMovieSelection(data) {
+    let html = '<div class="movie-selection">';
+
+    // Сообщение
+    if (data.message) {
+        html += `<p class="selection-message">${escapeHtml(data.message)}</p>`;
+    }
+
+    // Счетчик выбранных фильмов
+    html += '<div class="selection-counter">Выбрано: <span id="selectedCount">0</span> / 4</div>';
+
+    // Кнопки с фильмами
+    html += '<div class="movie-buttons">';
+    data.movies.forEach((movie, index) => {
+        html += `<button class="movie-btn" data-movie="${escapeHtml(movie)}" data-index="${index}">
+            ${escapeHtml(movie)}
+        </button>`;
+    });
+    html += '</div>';
+
+    // Кнопка подтверждения выбора
+    html += '<button class="confirm-selection-btn" id="confirmSelection" disabled>Подтвердить выбор</button>';
+
+    html += '</div>';
+
+    // Добавляем обработчики после рендера
+    setTimeout(() => {
+        initMovieSelection();
+    }, 100);
+
+    return html;
+}
+
+function initMovieSelection() {
+    const movieButtons = document.querySelectorAll('.movie-btn');
+    const confirmBtn = document.getElementById('confirmSelection');
+    const counterSpan = document.getElementById('selectedCount');
+    let selectedMovies = [];
+
+    movieButtons.forEach(btn => {
+        btn.addEventListener('click', function() {
+            const movieName = this.dataset.movie;
+
+            if (this.classList.contains('selected')) {
+                // Убираем выбор
+                this.classList.remove('selected');
+                selectedMovies = selectedMovies.filter(m => m !== movieName);
+            } else {
+                // Добавляем выбор, но не больше 4
+                if (selectedMovies.length < 4) {
+                    this.classList.add('selected');
+                    selectedMovies.push(movieName);
+                }
+            }
+
+            // Обновляем счетчик
+            counterSpan.textContent = selectedMovies.length;
+
+            // Активируем кнопку подтверждения, если выбрано ровно 4
+            if (selectedMovies.length === 4) {
+                confirmBtn.disabled = false;
+            } else {
+                confirmBtn.disabled = true;
+            }
+        });
+    });
+
+    if (confirmBtn && !confirmBtn.dataset.listenerAdded) {
+        confirmBtn.dataset.listenerAdded = 'true';
+        confirmBtn.addEventListener('click', async function() {
+            // Отключаем все кнопки
+            movieButtons.forEach(btn => btn.disabled = true);
+            confirmBtn.disabled = true;
+
+            // Формируем сообщение с выбранными фильмами
+            const message = `Я выбрал: ${selectedMovies.join(', ')}`;
+
+            // Добавляем сообщение пользователя
+            addMessage(message, true);
+
+            // Отправляем выбранные фильмы агенту
+            sendBtn.disabled = true;
+            showLoading();
+
+            try {
+                const response = await fetch('/recommend', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ message: message })
+                });
+
+                const data = await response.json();
+
+                removeLoading();
+
+                if (response.ok) {
+                    addMessage(data.response, false);
+                } else {
+                    addMessage(`Ошибка: ${data.error || 'Неизвестная ошибка'}`, false);
+                }
+            } catch (error) {
+                removeLoading();
+                addMessage(`Ошибка подключения: ${error.message}`, false);
+            } finally {
+                sendBtn.disabled = false;
+            }
+        });
+    }
 }
 
 function formatJSONResponse(data, rawJSON) {
@@ -182,28 +305,31 @@ function removeLoading() {
 async function sendMessage() {
     const message = messageInput.value.trim();
     if (!message) return;
-    
+
     // Добавляем сообщение пользователя
     addMessage(message, true);
     messageInput.value = '';
     sendBtn.disabled = true;
-    
+
     // Показываем индикатор загрузки
     showLoading();
-    
+
     try {
-        const response = await fetch('/chat', {
+        // Выбираем endpoint в зависимости от режима
+        const endpoint = currentMode === 'recommend' ? '/recommend' : '/chat';
+
+        const response = await fetch(endpoint, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({ message: message })
         });
-        
+
         const data = await response.json();
-        
+
         removeLoading();
-        
+
         if (response.ok) {
             addMessage(data.response, false);
         } else {
@@ -218,22 +344,64 @@ async function sendMessage() {
     }
 }
 
+function switchMode(mode) {
+    currentMode = mode;
+
+    // Обновляем активную кнопку
+    if (mode === 'info') {
+        infoModeBtn.classList.add('active');
+        recommendModeBtn.classList.remove('active');
+    } else {
+        infoModeBtn.classList.remove('active');
+        recommendModeBtn.classList.add('active');
+    }
+
+    // Очищаем чат и показываем приветственное сообщение
+    if (mode === 'info') {
+        chatMessages.innerHTML = `
+            <div class="message assistant">
+                <div class="message-content">Привет! Я агент Смит, твой справочник по фильмам. Введи название фильма.</div>
+            </div>
+        `;
+        // Очищаем историю на сервере
+        fetch('/clear', { method: 'POST' }).catch(console.error);
+    } else {
+        chatMessages.innerHTML = `
+            <div class="message assistant">
+                <div class="message-content">Привет! Я помогу тебе подобрать идеальный фильм. Расскажи, что тебе нравится, в какой компании будешь смотреть и какое у тебя настроение? 🎬</div>
+            </div>
+        `;
+        // Очищаем историю рекомендаций на сервере
+        fetch('/clear_recommendations', { method: 'POST' }).catch(console.error);
+    }
+}
+
 async function clearHistory() {
     if (!confirm('Очистить историю чата?')) return;
-    
+
     try {
-        await fetch('/clear', {
+        const endpoint = currentMode === 'recommend' ? '/clear_recommendations' : '/clear';
+        await fetch(endpoint, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             }
         });
-        
-        chatMessages.innerHTML = `
-            <div class="message assistant">
-                <div class="message-content">Привет! Я агент Смит, твой личный справочник по фильмам. По какому хочешь получить информацию?</div>
+
+        // Показываем приветственное сообщение в зависимости от режима
+        if (currentMode === 'info') {
+            chatMessages.innerHTML = `
+                <div class="message assistant">
+                    <div class="message-content">Привет! Я агент Смит, твой справочник по фильмам. Введи название фильма.</div>
                 </div>
-        `;
+            `;
+        } else {
+            chatMessages.innerHTML = `
+                <div class="message assistant">
+                    <div class="message-content">Привет! Я помогу тебе подобрать идеальный фильм. Расскажи, что тебе нравится, в какой компании будешь смотреть и какое у тебя настроение? 🎬</div>
+                </div>
+            `;
+        }
     } catch (error) {
         console.error('Ошибка при очистке:', error);
     }
@@ -242,6 +410,8 @@ async function clearHistory() {
 // Обработчики событий
 sendBtn.addEventListener('click', sendMessage);
 clearBtn.addEventListener('click', clearHistory);
+infoModeBtn.addEventListener('click', () => switchMode('info'));
+recommendModeBtn.addEventListener('click', () => switchMode('recommend'));
 
 messageInput.addEventListener('keypress', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {

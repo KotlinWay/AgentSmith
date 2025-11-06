@@ -4,12 +4,16 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
     <title>AgentSmith Chat</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=2">
 </head>
 <body>
     <div class="container">
         <div class="chat-header">
             <h1>🎬 AgentSmith</h1>
+            <div class="mode-switch">
+                <button id="infoModeBtn" class="mode-btn active">📚 Справочник</button>
+                <button id="recommendModeBtn" class="mode-btn">🎯 Рекомендатор</button>
+            </div>
             <button id="clearBtn" class="clear-btn">Очистить</button>
         </div>
         <div class="chat-messages" id="chatMessages">
@@ -22,7 +26,7 @@
             <button id="sendBtn">Отправить</button>
         </div>
     </div>
-    <script src="{{ url_for('static', filename='script.js') }}"></script>
+    <script src="{{ url_for('static', filename='script.js') }}?v=2"></script>
 </body>
 </html>
 

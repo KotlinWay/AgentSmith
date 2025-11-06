@@ -33,10 +33,42 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
 }
 
 .chat-header h1 {
     font-size: 24px;
+    font-weight: 600;
+}
+
+.mode-switch {
+    display: flex;
+    gap: 8px;
+    background: rgba(0, 0, 0, 0.2);
+    padding: 4px;
+    border-radius: 10px;
+}
+
+.mode-btn {
+    background: transparent;
+    border: none;
+    color: rgba(255, 255, 255, 0.7);
+    padding: 8px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.3s ease;
+}
+
+.mode-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+}
+
+.mode-btn.active {
+    background: rgba(255, 255, 255, 0.3);
+    color: white;
     font-weight: 600;
 }
 
@@ -383,6 +415,18 @@ body {
         min-height: 40px;
     }
 
+    .mode-switch {
+        order: 1;
+        width: 100%;
+        margin-top: 10px;
+    }
+
+    .mode-btn {
+        flex: 1;
+        padding: 10px 12px;
+        font-size: 14px;
+    }
+
     .chat-messages {
         padding: 16px 20px;
     }
@@ -488,6 +532,128 @@ body {
 
     .chat-input-container {
         padding: 8px 16px;
+    }
+}
+
+/* Стили для выбора фильмов */
+.movie-selection {
+    width: 100%;
+}
+
+.selection-message {
+    font-size: 16px;
+    font-weight: 500;
+    margin-bottom: 16px;
+    color: #2d3748;
+}
+
+.selection-counter {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 12px 20px;
+    border-radius: 12px;
+    font-weight: 600;
+    font-size: 16px;
+    text-align: center;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+.selection-counter span {
+    font-size: 20px;
+    font-weight: 700;
+}
+
+.movie-buttons {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.movie-btn {
+    background: white;
+    border: 2px solid #e2e8f0;
+    color: #2d3748;
+    padding: 14px 18px;
+    border-radius: 12px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    text-align: left;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.movie-btn:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 12px rgba(102, 126, 234, 0.15);
+    border-color: #667eea;
+}
+
+.movie-btn.selected {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-color: #667eea;
+    box-shadow: 0 6px 16px rgba(102, 126, 234, 0.4);
+    transform: translateY(-2px);
+}
+
+.movie-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.confirm-selection-btn {
+    width: 100%;
+    background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+    color: white;
+    border: none;
+    padding: 16px 24px;
+    border-radius: 12px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 12px rgba(72, 187, 120, 0.3);
+}
+
+.confirm-selection-btn:hover:not(:disabled) {
+    background: linear-gradient(135deg, #38a169 0%, #2f855a 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(72, 187, 120, 0.4);
+}
+
+.confirm-selection-btn:disabled {
+    background: #cbd5e0;
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
+/* Адаптивность для выбора фильмов */
+@media (max-width: 768px) {
+    .movie-buttons {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+
+    .movie-btn {
+        padding: 12px 16px;
+        font-size: 14px;
+    }
+
+    .selection-counter {
+        padding: 10px 16px;
+        font-size: 14px;
+    }
+
+    .selection-counter span {
+        font-size: 18px;
+    }
+
+    .confirm-selection-btn {
+        padding: 14px 20px;
+        font-size: 15px;
     }
 }
 
