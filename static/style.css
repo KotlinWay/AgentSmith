@@ -106,8 +106,110 @@ body {
     color: #333;
     border-bottom-left-radius: 4px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-    white-space: pre-wrap; /* сохраняем переносы и отступы для форматированного JSON */
+}
+
+/* Стили для JSON-ответов */
+.json-response {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.json-data {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.json-field {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: flex-start;
+}
+
+.json-field.json-description {
+    flex-direction: column;
+    gap: 6px;
+}
+
+.json-label {
+    font-weight: 600;
+    color: #667eea;
+    white-space: nowrap;
+}
+
+.json-value {
+    color: #333;
+    flex: 1;
+    word-break: break-word;
+}
+
+.json-description .json-value {
+    line-height: 1.6;
+    padding-top: 4px;
+}
+
+.json-error {
+    padding: 12px;
+    background: #fff3cd;
+    border-left: 4px solid #ffc107;
+    border-radius: 6px;
+    color: #856404;
+    font-weight: 500;
+}
+
+/* Спойлер для JSON */
+.json-spoiler {
+    margin-top: 8px;
+    border-top: 1px solid #e0e0e0;
+    padding-top: 12px;
+}
+
+.json-spoiler-toggle {
+    cursor: pointer;
+    user-select: none;
+    color: #667eea;
+    font-size: 14px;
+    font-weight: 500;
+    padding: 8px 0;
+    transition: color 0.2s;
+}
+
+.json-spoiler-toggle:hover {
+    color: #764ba2;
+}
+
+.json-spoiler-toggle::-webkit-details-marker {
+    display: none;
+}
+
+.json-spoiler-toggle::before {
+    content: '▶';
+    display: inline-block;
+    margin-right: 6px;
+    transition: transform 0.2s;
+    font-size: 10px;
+}
+
+.json-spoiler[open] .json-spoiler-toggle::before {
+    transform: rotate(90deg);
+}
+
+.json-raw {
+    margin: 12px 0 0 0;
+    padding: 12px;
+    background: #f8f9fa;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    overflow-x: auto;
+    white-space: pre;
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-size: 13px;
+    line-height: 1.5;
+    color: #495057;
+    max-height: 400px;
+    overflow-y: auto;
 }
 
 .chat-input-container {
@@ -231,6 +333,24 @@ body {
         padding: 14px 18px;
         font-size: 16px;
         line-height: 1.5;
+    }
+    
+    .json-field {
+        flex-direction: column;
+        gap: 4px;
+    }
+    
+    .json-label {
+        font-size: 14px;
+    }
+    
+    .json-value {
+        font-size: 15px;
+    }
+    
+    .json-raw {
+        font-size: 12px;
+        max-height: 300px;
     }
 
     .chat-input-container {

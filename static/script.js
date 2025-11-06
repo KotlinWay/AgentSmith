@@ -9,13 +9,107 @@ function addMessage(text, isUser) {
     
     const contentDiv = document.createElement('div');
     contentDiv.className = 'message-content';
-    contentDiv.textContent = text;
+    
+    if (isUser) {
+        contentDiv.textContent = text;
+    } else {
+        // Пытаемся распарсить JSON
+        try {
+            const jsonData = JSON.parse(text);
+            contentDiv.innerHTML = formatJSONResponse(jsonData, text);
+        } catch (e) {
+            // Если не JSON - выводим как обычный текст
+            contentDiv.textContent = text;
+        }
+    }
     
     messageDiv.appendChild(contentDiv);
     chatMessages.appendChild(messageDiv);
     
     // Прокрутка вниз
     chatMessages.scrollTop = chatMessages.scrollHeight;
+    
+    // Инициализация спойлеров после добавления сообщения
+    initSpoilers();
+}
+
+function formatJSONResponse(data, rawJSON) {
+    let html = '<div class="json-response">';
+    
+    // Если есть ошибка
+    if (data.error) {
+        html += `<div class="json-error">⚠️ ${escapeHtml(data.error)}</div>`;
+    } else {
+        // Красивое отображение данных
+        html += '<div class="json-data">';
+        
+        if (data.title) {
+            html += `<div class="json-field"><span class="json-label">🎬 Фильм:</span> <span class="json-value">${escapeHtml(data.title)}</span></div>`;
+        }
+        
+        if (data.release) {
+            html += `<div class="json-field"><span class="json-label">📅 Год:</span> <span class="json-value">${escapeHtml(data.release)}</span></div>`;
+        }
+        
+        if (data.rating) {
+            html += `<div class="json-field"><span class="json-label">⭐ Рейтинг:</span> <span class="json-value">${escapeHtml(data.rating)}</span></div>`;
+        }
+        
+        if (data.producer) {
+            html += `<div class="json-field"><span class="json-label">🎭 Режиссёр:</span> <span class="json-value">${escapeHtml(data.producer)}</span></div>`;
+        }
+        
+        if (data.actors && Array.isArray(data.actors) && data.actors.length > 0) {
+            html += '<div class="json-field"><span class="json-label">👥 Актёры:</span> <span class="json-value">';
+            const actorsList = data.actors.map(actor => {
+                const name = actor.firstName && actor.lastName 
+                    ? `${escapeHtml(actor.firstName)} ${escapeHtml(actor.lastName)}`
+                    : (actor.firstName || actor.lastName || '');
+                return name;
+            }).filter(Boolean);
+            html += actorsList.join(', ') || '-';
+            html += '</span></div>';
+        }
+        
+        if (data.description) {
+            html += `<div class="json-field json-description"><span class="json-label">📝 Описание:</span> <span class="json-value">${escapeHtml(data.description)}</span></div>`;
+        }
+        
+        html += '</div>';
+    }
+    
+    // Спойлер с JSON
+    html += `
+        <details class="json-spoiler">
+            <summary class="json-spoiler-toggle">📄 Показать JSON</summary>
+            <pre class="json-raw">${escapeHtml(rawJSON)}</pre>
+        </details>
+    `;
+    
+    html += '</div>';
+    return html;
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function initSpoilers() {
+    // Добавляем обработчики для спойлеров
+    const spoilers = document.querySelectorAll('.json-spoiler');
+    spoilers.forEach(spoiler => {
+        const summary = spoiler.querySelector('summary');
+        if (summary && !summary.dataset.listenerAdded) {
+            summary.dataset.listenerAdded = 'true';
+            summary.addEventListener('click', function() {
+                setTimeout(() => {
+                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                }, 100);
+            });
+        }
+    });
 }
 
 function showLoading() {
