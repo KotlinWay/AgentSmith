@@ -356,7 +356,7 @@ function displayReasoningResults(data) {
         'direct': '1️⃣ Прямой ответ',
         'step_by_step': '2️⃣ Пошаговое решение',
         'prompt_generator': '3️⃣ С промптом от ИИ',
-        'expert_panel': '4️⃣ Группа экспертов'
+        'expert_panel': '4️⃣ Группа экспертов (🔬 Физик, 👵 Бабушка, 👦 Ребёнок, 🤖 Робот)'
     };
 
     for (const [method, result] of Object.entries(data.results)) {
@@ -368,18 +368,6 @@ function displayReasoningResults(data) {
         html += '</div>';
     }
 
-    html += '</div>';
-
-    // Добавляем сравнение
-    html += '<div class="comparison-section">';
-    html += '<h3>📊 Сравнение результатов</h3>';
-    html += '<p>Проанализируйте, какой способ дал наиболее точный и полный ответ. Обратите внимание на:</p>';
-    html += '<ul>';
-    html += '<li><strong>Точность:</strong> Правильность ответа</li>';
-    html += '<li><strong>Полнота:</strong> Насколько детально раскрыто решение</li>';
-    html += '<li><strong>Понятность:</strong> Легко ли следовать логике рассуждений</li>';
-    html += '<li><strong>Креативность:</strong> Присутствуют ли нестандартные подходы</li>';
-    html += '</ul>';
     html += '</div>';
 
     reasoningResults.innerHTML = html;
@@ -433,27 +421,37 @@ function switchMode(mode) {
     // Обновляем активную кнопку
     infoModeBtn.classList.remove('active');
     recommendModeBtn.classList.remove('active');
-    reasoningModeBtn.classList.remove('active');
+    if (reasoningModeBtn) {
+        reasoningModeBtn.classList.remove('active');
+    }
 
     if (mode === 'info') {
         infoModeBtn.classList.add('active');
     } else if (mode === 'recommend') {
         recommendModeBtn.classList.add('active');
-    } else if (mode === 'reasoning') {
+    } else if (mode === 'reasoning' && reasoningModeBtn) {
         reasoningModeBtn.classList.add('active');
     }
 
     // Показываем/скрываем интерфейсы
-    if (mode === 'reasoning') {
+    if (mode === 'reasoning' && reasoningContainer && chatInputContainer) {
         chatMessages.style.display = 'none';
         chatInputContainer.style.display = 'none';
         reasoningContainer.style.display = 'block';
-        reasoningResults.innerHTML = '';
-        taskInput.value = '';
+        if (reasoningResults) {
+            reasoningResults.innerHTML = '';
+        }
+        if (taskInput) {
+            taskInput.value = '';
+        }
     } else {
         chatMessages.style.display = 'flex';
-        chatInputContainer.style.display = 'flex';
-        reasoningContainer.style.display = 'none';
+        if (chatInputContainer) {
+            chatInputContainer.style.display = 'flex';
+        }
+        if (reasoningContainer) {
+            reasoningContainer.style.display = 'none';
+        }
 
         // Очищаем чат и показываем приветственное сообщение
         if (mode === 'info') {
@@ -464,7 +462,7 @@ function switchMode(mode) {
             `;
             // Очищаем историю на сервере
             fetch('/clear', { method: 'POST' }).catch(console.error);
-        } else {
+        } else if (mode === 'recommend') {
             chatMessages.innerHTML = `
                 <div class="message assistant">
                     <div class="message-content">Привет! Я помогу тебе подобрать идеальный фильм. Расскажи, что тебе нравится, в какой компании будешь смотреть и какое у тебя настроение? 🎬</div>
@@ -512,7 +510,9 @@ sendBtn.addEventListener('click', sendMessage);
 clearBtn.addEventListener('click', clearHistory);
 infoModeBtn.addEventListener('click', () => switchMode('info'));
 recommendModeBtn.addEventListener('click', () => switchMode('recommend'));
-reasoningModeBtn.addEventListener('click', () => switchMode('reasoning'));
+if (reasoningModeBtn) {
+    reasoningModeBtn.addEventListener('click', () => switchMode('reasoning'));
+}
 
 messageInput.addEventListener('keypress', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {

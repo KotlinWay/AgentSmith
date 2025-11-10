@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
     <title>AgentSmith Chat</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=2">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=3">
 </head>
 <body>
     <div class="container">
@@ -36,7 +36,7 @@
                     <button class="method-btn" data-method="direct">1. Прямой ответ</button>
                     <button class="method-btn" data-method="step_by_step">2. Пошагово</button>
                     <button class="method-btn" data-method="prompt_generator">3. С промптом от ИИ</button>
-                    <button class="method-btn" data-method="expert_panel">4. Группа экспертов</button>
+                    <button class="method-btn" data-method="expert_panel" title="Физик-ядерщик, Бабушка у подъезда, Ребёнок 7 лет, 300-летний робот из 2694 года">4. 🔬👵👦🤖 Группа экспертов</button>
                 </div>
             </div>
             <div class="reasoning-results" id="reasoningResults"></div>
@@ -47,7 +47,7 @@
             <button id="sendBtn">Отправить</button>
         </div>
     </div>
-    <script src="{{ url_for('static', filename='script.js') }}?v=2"></script>
+    <script src="{{ url_for('static', filename='script.js') }}?v=3"></script>
 </body>
 </html>
 
