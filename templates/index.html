@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
     <title>AgentSmith Chat</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=3">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=7">
 </head>
 <body>
     <div class="container">
@@ -14,6 +14,7 @@
                 <button id="infoModeBtn" class="mode-btn active">📚 Справочник</button>
                 <button id="recommendModeBtn" class="mode-btn">🎯 Рекомендатор</button>
                 <button id="reasoningModeBtn" class="mode-btn">🧠 Рассуждения</button>
+                <button id="temperatureModeBtn" class="mode-btn">🌡️ Температура</button>
             </div>
             <button id="clearBtn" class="clear-btn">Очистить</button>
         </div>
@@ -42,12 +43,28 @@
             <div class="reasoning-results" id="reasoningResults"></div>
         </div>
 
+        <!-- Интерфейс для эксперимента с температурой -->
+        <div class="temperature-container" id="temperatureContainer" style="display: none;">
+            <div class="temperature-intro">
+                <h2>🌡️ Эксперимент с температурой</h2>
+                <p>Температура контролирует степень случайности в ответах AI модели. Давайте сравним результаты при разных значениях!</p>
+            </div>
+
+            <div class="temperature-task">
+                <label for="temperaturePrompt">Введите запрос для тестирования:</label>
+                <textarea id="temperaturePrompt" placeholder="Например: Напиши короткую историю о роботе, который учится любить" rows="3"></textarea>
+                <button class="run-temperature-btn" id="runTemperatureBtn">🚀 Запустить сравнение</button>
+            </div>
+
+            <div class="temperature-results" id="temperatureResults"></div>
+        </div>
+
         <div class="chat-input-container" id="chatInputContainer">
             <input type="text" id="messageInput" placeholder="Введите ваше сообщение..." autocomplete="off">
             <button id="sendBtn">Отправить</button>
         </div>
     </div>
-    <script src="{{ url_for('static', filename='script.js') }}?v=3"></script>
+    <script src="{{ url_for('static', filename='script.js') }}?v=7"></script>
 </body>
 </html>
 

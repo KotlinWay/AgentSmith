@@ -5,12 +5,17 @@ const clearBtn = document.getElementById('clearBtn');
 const infoModeBtn = document.getElementById('infoModeBtn');
 const recommendModeBtn = document.getElementById('recommendModeBtn');
 const reasoningModeBtn = document.getElementById('reasoningModeBtn');
+const temperatureModeBtn = document.getElementById('temperatureModeBtn');
 const reasoningContainer = document.getElementById('reasoningContainer');
+const temperatureContainer = document.getElementById('temperatureContainer');
 const chatInputContainer = document.getElementById('chatInputContainer');
 const taskInput = document.getElementById('taskInput');
 const reasoningResults = document.getElementById('reasoningResults');
+const temperaturePrompt = document.getElementById('temperaturePrompt');
+const temperatureResults = document.getElementById('temperatureResults');
+const runTemperatureBtn = document.getElementById('runTemperatureBtn');
 
-// Текущий режим работы: 'info', 'recommend' или 'reasoning'
+// Текущий режим работы: 'info', 'recommend', 'reasoning' или 'temperature'
 let currentMode = 'info';
 
 function addMessage(text, isUser) {
@@ -373,6 +378,131 @@ function displayReasoningResults(data) {
     reasoningResults.innerHTML = html;
 }
 
+async function runTemperatureExperiment() {
+    const prompt = temperaturePrompt.value.trim();
+    if (!prompt) {
+        alert('Пожалуйста, введите запрос для тестирования');
+        return;
+    }
+
+    // Отключаем кнопку и показываем загрузку
+    runTemperatureBtn.disabled = true;
+    temperaturePrompt.disabled = true;
+    temperatureResults.innerHTML = '<div class="loading-temperature">⏳ Запускаю эксперимент с разными температурами...<br>Это может занять некоторое время, так как делается 3 запроса к API</div>';
+
+    try {
+        const response = await fetch('/temperature_experiment', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ prompt: prompt })
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+            displayTemperatureResults(data);
+        } else {
+            temperatureResults.innerHTML = `<div class="error">Ошибка: ${data.error || 'Неизвестная ошибка'}</div>`;
+        }
+    } catch (error) {
+        temperatureResults.innerHTML = `<div class="error">Ошибка подключения: ${error.message}</div>`;
+    } finally {
+        runTemperatureBtn.disabled = false;
+        temperaturePrompt.disabled = false;
+    }
+}
+
+function displayTemperatureResults(data) {
+    let html = '<div class="temperature-results-header">';
+    html += `<h3>📊 Результаты эксперимента</h3>`;
+    html += `<p class="experiment-prompt"><strong>Запрос:</strong> ${escapeHtml(data.prompt)}</p>`;
+    html += '</div>';
+
+    html += '<div class="temperature-cards-container">';
+
+    // Температура 0.0
+    html += '<div class="temperature-card temp-cold">';
+    html += '<div class="temp-header">';
+    html += '<div class="temp-value">🧊 Температура: 0.0</div>';
+    html += '<div class="temp-label">Детерминированный</div>';
+    html += '</div>';
+    html += '<div class="temp-description">';
+    html += `<p>${escapeHtml(data.temperatures['0.0'].description)}</p>`;
+    html += '</div>';
+    html += '<div class="temp-response">';
+    html += `<pre>${escapeHtml(data.temperatures['0.0'].response)}</pre>`;
+    html += '</div>';
+    html += '</div>';
+
+    // Температура 0.5
+    html += '<div class="temperature-card temp-medium">';
+    html += '<div class="temp-header">';
+    html += '<div class="temp-value">🌤️ Температура: 0.5</div>';
+    html += '<div class="temp-label">Сбалансированный</div>';
+    html += '</div>';
+    html += '<div class="temp-description">';
+    html += `<p>${escapeHtml(data.temperatures['0.5'].description)}</p>`;
+    html += '</div>';
+    html += '<div class="temp-response">';
+    html += `<pre>${escapeHtml(data.temperatures['0.5'].response)}</pre>`;
+    html += '</div>';
+    html += '</div>';
+
+    // Температура 1.0
+    html += '<div class="temperature-card temp-hot">';
+    html += '<div class="temp-header">';
+    html += '<div class="temp-value">🔥 Температура: 1.0</div>';
+    html += '<div class="temp-label">Креативный</div>';
+    html += '</div>';
+    html += '<div class="temp-description">';
+    html += `<p>${escapeHtml(data.temperatures['1.0'].description)}</p>`;
+    html += '</div>';
+    html += '<div class="temp-response">';
+    html += `<pre>${escapeHtml(data.temperatures['1.0'].response)}</pre>`;
+    html += '</div>';
+    html += '</div>';
+
+    html += '</div>';
+
+    // Рекомендации
+    html += '<div class="temperature-recommendations">';
+    html += '<h3>💡 Рекомендации по использованию</h3>';
+    html += '<div class="recommendations-grid">';
+
+    html += '<div class="recommendation-card rec-cold">';
+    html += '<h4>🧊 Температура 0.0</h4>';
+    html += `<p>${escapeHtml(data.recommendations['0.0'])}</p>`;
+    html += '</div>';
+
+    html += '<div class="recommendation-card rec-medium">';
+    html += '<h4>🌤️ Температура 0.5</h4>';
+    html += `<p>${escapeHtml(data.recommendations['0.5'])}</p>`;
+    html += '</div>';
+
+    html += '<div class="recommendation-card rec-hot">';
+    html += '<h4>🔥 Температура 1.0</h4>';
+    html += `<p>${escapeHtml(data.recommendations['1.0'])}</p>`;
+    html += '</div>';
+
+    html += '</div>';
+    html += '</div>';
+
+    // Выводы
+    html += '<div class="temperature-conclusions">';
+    html += '<h3>📝 Выводы</h3>';
+    html += '<ul>';
+    html += '<li><strong>Точность:</strong> При температуре 0.0 модель дает наиболее предсказуемые и точные ответы, идеально для фактических запросов.</li>';
+    html += '<li><strong>Креативность:</strong> При температуре 1.0 модель проявляет максимальную креативность и разнообразие, отлично для творческих задач.</li>';
+    html += '<li><strong>Баланс:</strong> Температура 0.5 обеспечивает хороший баланс между точностью и креативностью, подходит для большинства задач.</li>';
+    html += '<li><strong>Разнообразие:</strong> Чем выше температура (в диапазоне 0.0-1.0), тем больше вариативность ответов при повторных запросах.</li>';
+    html += '</ul>';
+    html += '</div>';
+
+    temperatureResults.innerHTML = html;
+}
+
 async function sendMessage() {
     const message = messageInput.value.trim();
     if (!message) return;
@@ -424,6 +554,9 @@ function switchMode(mode) {
     if (reasoningModeBtn) {
         reasoningModeBtn.classList.remove('active');
     }
+    if (temperatureModeBtn) {
+        temperatureModeBtn.classList.remove('active');
+    }
 
     if (mode === 'info') {
         infoModeBtn.classList.add('active');
@@ -431,6 +564,8 @@ function switchMode(mode) {
         recommendModeBtn.classList.add('active');
     } else if (mode === 'reasoning' && reasoningModeBtn) {
         reasoningModeBtn.classList.add('active');
+    } else if (mode === 'temperature' && temperatureModeBtn) {
+        temperatureModeBtn.classList.add('active');
     }
 
     // Показываем/скрываем интерфейсы
@@ -438,11 +573,27 @@ function switchMode(mode) {
         chatMessages.style.display = 'none';
         chatInputContainer.style.display = 'none';
         reasoningContainer.style.display = 'block';
+        if (temperatureContainer) {
+            temperatureContainer.style.display = 'none';
+        }
         if (reasoningResults) {
             reasoningResults.innerHTML = '';
         }
         if (taskInput) {
             taskInput.value = '';
+        }
+    } else if (mode === 'temperature' && temperatureContainer && chatInputContainer) {
+        chatMessages.style.display = 'none';
+        chatInputContainer.style.display = 'none';
+        if (reasoningContainer) {
+            reasoningContainer.style.display = 'none';
+        }
+        temperatureContainer.style.display = 'block';
+        if (temperatureResults) {
+            temperatureResults.innerHTML = '';
+        }
+        if (temperaturePrompt) {
+            temperaturePrompt.value = '';
         }
     } else {
         chatMessages.style.display = 'flex';
@@ -451,6 +602,9 @@ function switchMode(mode) {
         }
         if (reasoningContainer) {
             reasoningContainer.style.display = 'none';
+        }
+        if (temperatureContainer) {
+            temperatureContainer.style.display = 'none';
         }
 
         // Очищаем чат и показываем приветственное сообщение
@@ -512,6 +666,12 @@ infoModeBtn.addEventListener('click', () => switchMode('info'));
 recommendModeBtn.addEventListener('click', () => switchMode('recommend'));
 if (reasoningModeBtn) {
     reasoningModeBtn.addEventListener('click', () => switchMode('reasoning'));
+}
+if (temperatureModeBtn) {
+    temperatureModeBtn.addEventListener('click', () => switchMode('temperature'));
+}
+if (runTemperatureBtn) {
+    runTemperatureBtn.addEventListener('click', runTemperatureExperiment);
 }
 
 messageInput.addEventListener('keypress', (e) => {
