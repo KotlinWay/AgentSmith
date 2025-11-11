@@ -655,7 +655,7 @@ def call_huggingface_model(model_name: str, prompt: str, hf_token: str = None) -
     Вызов модели из HuggingFace через Inference API
     Возвращает результат с метриками
     """
-    api_url = f"https://api-inference.huggingface.co/models/{model_name}"
+    api_url = f"https://router.huggingface.co/hf-inference/{model_name}"
 
     headers = {}
     if hf_token:
