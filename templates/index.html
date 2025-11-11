@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
     <title>AgentSmith Chat</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=7">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=8">
 </head>
 <body>
     <div class="container">
@@ -15,6 +15,7 @@
                 <button id="recommendModeBtn" class="mode-btn">🎯 Рекомендатор</button>
                 <button id="reasoningModeBtn" class="mode-btn">🧠 Рассуждения</button>
                 <button id="temperatureModeBtn" class="mode-btn">🌡️ Температура</button>
+                <button id="comparisonModeBtn" class="mode-btn">⚖️ Сравнение</button>
             </div>
             <button id="clearBtn" class="clear-btn">Очистить</button>
         </div>
@@ -59,12 +60,39 @@
             <div class="temperature-results" id="temperatureResults"></div>
         </div>
 
+        <!-- Интерфейс для сравнения моделей -->
+        <div class="comparison-container" id="comparisonContainer" style="display: none;">
+            <div class="comparison-intro">
+                <h2>⚖️ Сравнение AI моделей</h2>
+                <p>Сравните разные модели из HuggingFace по скорости ответа, количеству токенов и качеству результатов!</p>
+            </div>
+
+            <div class="comparison-task">
+                <label for="comparisonPrompt">Введите запрос для тестирования моделей:</label>
+                <textarea id="comparisonPrompt" placeholder="Например: Write a short story about a robot learning to love" rows="3"></textarea>
+
+                <label>Выберите модели для сравнения (минимум 2):</label>
+                <div class="model-selection">
+                    <label><input type="checkbox" value="gpt2" class="model-checkbox" checked> GPT-2 (начало списка)</label>
+                    <label><input type="checkbox" value="distilgpt2" class="model-checkbox" checked> DistilGPT-2 (легковесная)</label>
+                    <label><input type="checkbox" value="microsoft/DialoGPT-medium" class="model-checkbox"> DialoGPT-medium (диалоги)</label>
+                    <label><input type="checkbox" value="EleutherAI/gpt-neo-125M" class="model-checkbox"> GPT-Neo-125M (середина)</label>
+                    <label><input type="checkbox" value="facebook/opt-350m" class="model-checkbox"> OPT-350m (Facebook)</label>
+                    <label><input type="checkbox" value="google/flan-t5-base" class="model-checkbox"> FLAN-T5-base (Google)</label>
+                </div>
+
+                <button class="run-comparison-btn" id="runComparisonBtn">🚀 Запустить сравнение</button>
+            </div>
+
+            <div class="comparison-results" id="comparisonResults"></div>
+        </div>
+
         <div class="chat-input-container" id="chatInputContainer">
             <input type="text" id="messageInput" placeholder="Введите ваше сообщение..." autocomplete="off">
             <button id="sendBtn">Отправить</button>
         </div>
     </div>
-    <script src="{{ url_for('static', filename='script.js') }}?v=7"></script>
+    <script src="{{ url_for('static', filename='script.js') }}?v=8"></script>
 </body>
 </html>
 

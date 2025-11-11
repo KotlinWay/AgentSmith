@@ -3,6 +3,8 @@ import requests
 import json
 import os
 import re
+import time
+from typing import Dict, Any
 
 app = Flask(__name__)
 
@@ -621,6 +623,168 @@ def temperature_experiment():
         }
 
         return jsonify(analysis)
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# Функция для подсчета токенов (приблизительная оценка)
+def estimate_tokens(text: str) -> int:
+    """Приблизительная оценка количества токенов"""
+    # Простая эвристика: ~4 символа = 1 токен для английского
+    # Для русского языка: ~6 символов = 1 токен
+    words = text.split()
+    chars = len(text)
+    # Среднее между словами и символами
+    return max(len(words), chars // 5)
+
+
+# Цены моделей (приблизительные, в USD за 1M токенов)
+MODEL_PRICING = {
+    'gpt2': {'input': 0, 'output': 0},  # Бесплатная
+    'distilgpt2': {'input': 0, 'output': 0},  # Бесплатная
+    'microsoft/DialoGPT-medium': {'input': 0, 'output': 0},  # Бесплатная
+    'EleutherAI/gpt-neo-125M': {'input': 0, 'output': 0},  # Бесплатная
+    'facebook/opt-350m': {'input': 0, 'output': 0},  # Бесплатная
+    'google/flan-t5-base': {'input': 0, 'output': 0},  # Бесплатная
+}
+
+
+def call_huggingface_model(model_name: str, prompt: str, hf_token: str = None) -> Dict[str, Any]:
+    """
+    Вызов модели из HuggingFace через Inference API
+    Возвращает результат с метриками
+    """
+    api_url = f"https://api-inference.huggingface.co/models/{model_name}"
+
+    headers = {}
+    if hf_token:
+        headers["Authorization"] = f"Bearer {hf_token}"
+
+    payload = {
+        "inputs": prompt,
+        "parameters": {
+            "max_new_tokens": 150,
+            "temperature": 0.7,
+            "return_full_text": False
+        }
+    }
+
+    start_time = time.time()
+
+    try:
+        response = requests.post(api_url, headers=headers, json=payload, timeout=30)
+        elapsed_time = time.time() - start_time
+
+        if response.status_code == 200:
+            result = response.json()
+
+            # Извлечение текста ответа
+            if isinstance(result, list) and len(result) > 0:
+                generated_text = result[0].get('generated_text', '')
+            elif isinstance(result, dict):
+                generated_text = result.get('generated_text', str(result))
+            else:
+                generated_text = str(result)
+
+            # Подсчет токенов
+            input_tokens = estimate_tokens(prompt)
+            output_tokens = estimate_tokens(generated_text)
+            total_tokens = input_tokens + output_tokens
+
+            # Расчет стоимости
+            pricing = MODEL_PRICING.get(model_name, {'input': 0, 'output': 0})
+            cost = (input_tokens * pricing['input'] + output_tokens * pricing['output']) / 1_000_000
+
+            return {
+                'success': True,
+                'model': model_name,
+                'response': generated_text,
+                'metrics': {
+                    'response_time': round(elapsed_time, 3),
+                    'input_tokens': input_tokens,
+                    'output_tokens': output_tokens,
+                    'total_tokens': total_tokens,
+                    'cost_usd': round(cost, 6),
+                    'is_free': pricing['input'] == 0 and pricing['output'] == 0
+                }
+            }
+        else:
+            return {
+                'success': False,
+                'model': model_name,
+                'error': f"HTTP {response.status_code}: {response.text}",
+                'metrics': {
+                    'response_time': round(time.time() - start_time, 3)
+                }
+            }
+
+    except Exception as e:
+        return {
+            'success': False,
+            'model': model_name,
+            'error': str(e),
+            'metrics': {
+                'response_time': round(time.time() - start_time, 3)
+            }
+        }
+
+
+@app.route('/model_comparison', methods=['POST'])
+def model_comparison():
+    """Сравнение разных моделей AI с замером метрик"""
+    data = request.json
+    prompt = data.get('prompt', '').strip()
+    models = data.get('models', [])
+    hf_token = config.get('huggingface_token')  # Опционально
+
+    if not prompt:
+        return jsonify({'error': 'Запрос не указан'}), 400
+
+    if not models or len(models) < 2:
+        return jsonify({'error': 'Необходимо выбрать минимум 2 модели для сравнения'}), 400
+
+    results = []
+
+    try:
+        # Вызываем каждую модель
+        for model_name in models:
+            result = call_huggingface_model(model_name, prompt, hf_token)
+            results.append(result)
+
+        # Добавляем сравнительный анализ
+        successful_results = [r for r in results if r['success']]
+
+        comparison = {
+            'prompt': prompt,
+            'models_compared': len(models),
+            'successful_calls': len(successful_results),
+            'results': results
+        }
+
+        if successful_results:
+            # Находим самую быструю и медленную модель
+            fastest = min(successful_results, key=lambda x: x['metrics']['response_time'])
+            slowest = max(successful_results, key=lambda x: x['metrics']['response_time'])
+
+            # Находим модель с наименьшим количеством токенов
+            most_concise = min(successful_results, key=lambda x: x['metrics']['output_tokens'])
+            most_verbose = max(successful_results, key=lambda x: x['metrics']['output_tokens'])
+
+            comparison['analysis'] = {
+                'fastest_model': fastest['model'],
+                'fastest_time': fastest['metrics']['response_time'],
+                'slowest_model': slowest['model'],
+                'slowest_time': slowest['metrics']['response_time'],
+                'most_concise_model': most_concise['model'],
+                'most_concise_tokens': most_concise['metrics']['output_tokens'],
+                'most_verbose_model': most_verbose['model'],
+                'most_verbose_tokens': most_verbose['metrics']['output_tokens'],
+                'avg_response_time': round(sum(r['metrics']['response_time'] for r in successful_results) / len(successful_results), 3),
+                'avg_output_tokens': round(sum(r['metrics']['output_tokens'] for r in successful_results) / len(successful_results), 1)
+            }
+
+        return jsonify(comparison)
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
