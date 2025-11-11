@@ -574,6 +574,58 @@ def reasoning():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/temperature_experiment', methods=['POST'])
+def temperature_experiment():
+    """Эксперимент с разными значениями температуры"""
+    data = request.json
+    prompt = data.get('prompt', '').strip()
+
+    if not prompt:
+        return jsonify({'error': 'Запрос не указан'}), 400
+
+    # Значения температуры для сравнения
+    temperatures = [0.0, 0.7, 1.2]
+    results = {}
+
+    try:
+        # Запускаем один и тот же запрос с разными температурами
+        for temp in temperatures:
+            messages = [
+                {"role": "user", "text": prompt}
+            ]
+            response = call_yandex_gpt(messages, temperature=temp)
+            results[str(temp)] = response
+
+        # Добавляем анализ результатов
+        analysis = {
+            'prompt': prompt,
+            'temperatures': {
+                '0.0': {
+                    'response': results['0.0'],
+                    'description': 'Детерминированный режим - максимальная точность и предсказуемость'
+                },
+                '0.7': {
+                    'response': results['0.7'],
+                    'description': 'Сбалансированный режим - хорошее сочетание точности и креативности'
+                },
+                '1.2': {
+                    'response': results['1.2'],
+                    'description': 'Креативный режим - высокая вариативность и оригинальность'
+                }
+            },
+            'recommendations': {
+                '0.0': 'Подходит для: фактических запросов, технической документации, точных вычислений, переводов',
+                '0.7': 'Подходит для: общения, рассказов, объяснений, советов, большинства задач',
+                '1.2': 'Подходит для: креативного письма, генерации идей, художественных текстов, нестандартных решений'
+            }
+        }
+
+        return jsonify(analysis)
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5005)
 
