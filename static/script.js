@@ -436,17 +436,17 @@ function displayTemperatureResults(data) {
     html += '</div>';
     html += '</div>';
 
-    // Температура 0.7
+    // Температура 0.5
     html += '<div class="temperature-card temp-medium">';
     html += '<div class="temp-header">';
-    html += '<div class="temp-value">🌤️ Температура: 0.7</div>';
+    html += '<div class="temp-value">🌤️ Температура: 0.5</div>';
     html += '<div class="temp-label">Сбалансированный</div>';
     html += '</div>';
     html += '<div class="temp-description">';
-    html += `<p>${escapeHtml(data.temperatures['0.7'].description)}</p>`;
+    html += `<p>${escapeHtml(data.temperatures['0.5'].description)}</p>`;
     html += '</div>';
     html += '<div class="temp-response">';
-    html += `<pre>${escapeHtml(data.temperatures['0.7'].response)}</pre>`;
+    html += `<pre>${escapeHtml(data.temperatures['0.5'].response)}</pre>`;
     html += '</div>';
     html += '</div>';
 
@@ -477,8 +477,8 @@ function displayTemperatureResults(data) {
     html += '</div>';
 
     html += '<div class="recommendation-card rec-medium">';
-    html += '<h4>🌤️ Температура 0.7</h4>';
-    html += `<p>${escapeHtml(data.recommendations['0.7'])}</p>`;
+    html += '<h4>🌤️ Температура 0.5</h4>';
+    html += `<p>${escapeHtml(data.recommendations['0.5'])}</p>`;
     html += '</div>';
 
     html += '<div class="recommendation-card rec-hot">';
@@ -495,7 +495,7 @@ function displayTemperatureResults(data) {
     html += '<ul>';
     html += '<li><strong>Точность:</strong> При температуре 0.0 модель дает наиболее предсказуемые и точные ответы, идеально для фактических запросов.</li>';
     html += '<li><strong>Креативность:</strong> При температуре 1.0 модель проявляет максимальную креативность и разнообразие, отлично для творческих задач.</li>';
-    html += '<li><strong>Баланс:</strong> Температура 0.7 обеспечивает хороший баланс между точностью и креативностью, подходит для большинства задач.</li>';
+    html += '<li><strong>Баланс:</strong> Температура 0.5 обеспечивает хороший баланс между точностью и креативностью, подходит для большинства задач.</li>';
     html += '<li><strong>Разнообразие:</strong> Чем выше температура (в диапазоне 0.0-1.0), тем больше вариативность ответов при повторных запросах.</li>';
     html += '</ul>';
     html += '</div>';
