@@ -19,6 +19,7 @@ config = load_config()
 # История диалога
 chat_history = []
 recommendation_history = []
+reasoning_history = []
 
 
 RECOMMENDATION_AGENT_PROMPT = """
@@ -108,6 +109,41 @@ JSON_SCHEMA_INSTRUCTION = (
     "  }\n"
     "}\n"
 )
+
+
+# Промпты для разных способов рассуждения
+DIRECT_PROMPT = "Ответь на вопрос напрямую, кратко и по делу."
+
+STEP_BY_STEP_PROMPT = """Реши задачу пошагово:
+1. Сначала проанализируй условие задачи
+2. Определи, какие шаги нужны для решения
+3. Выполни каждый шаг последовательно
+4. Сформулируй финальный ответ
+
+Показывай своё рассуждение на каждом этапе."""
+
+PROMPT_GENERATOR_INSTRUCTION = """Ты - эксперт по созданию промптов для AI моделей.
+Твоя задача - создать оптимальный промпт для решения задачи, которую тебе предоставит пользователь.
+Проанализируй задачу и создай детальный промпт, который поможет другой AI модели максимально эффективно решить эту задачу.
+Верни только сам промпт, без дополнительных пояснений."""
+
+EXPERT_PANEL_PROMPT = """Ты - модератор группы экспертов. В твоей команде есть 4 уникальных персонажа:
+
+1. **Физик-ядерщик** - научный специалист с глубоким пониманием фундаментальных законов природы и строгой логикой. Анализирует задачу через призму научного метода, ищет объективные закономерности и причинно-следственные связи.
+
+2. **Бабушка у подъезда** - житейски мудрая, имеет огромный практический опыт. Смотрит на задачу с точки зрения здравого смысла, народной мудрости и простых, понятных решений. Может рассказать поучительную историю из жизни.
+
+3. **Ребёнок 7 лет** - чистый, незамутнённый взгляд на вещи. Задаёт простые, но глубокие вопросы. Не скован стереотипами, видит очевидное, которое взрослые часто упускают. Рассуждает просто и честно.
+
+4. **300-летний робот из 2694 года** - искусственный интеллект с огромной базой знаний о будущем человечества. Анализирует задачу с позиции долгосрочной перспективы, технологического прогресса и футуристического мышления. Знает, как развивались события в следующие века.
+
+Для решения задачи:
+1. Дай слово Физику-ядерщику - пусть проанализирует задачу научно и структурированно
+2. Дай слово Бабушке у подъезда - пусть даст житейский совет и поделится мудростью
+3. Дай слово Ребёнку 7 лет - пусть посмотрит свежим взглядом и задаст простые вопросы
+4. Дай слово Роботу из будущего - пусть предложит взгляд из 2694 года
+
+Представь мнение каждого эксперта отдельно, с их уникальным стилем речи и мышления, а затем дай общий вывод, синтезирующий все точки зрения."""
 
 
 def get_recommendation_agent_response(user_message):
@@ -336,6 +372,84 @@ def get_agent_response(user_message):
         return json.dumps(empty_movie_object(), ensure_ascii=False, indent=2)
 
 
+def call_yandex_gpt(messages, temperature=0.7):
+    """Универсальная функция для вызова Yandex GPT"""
+    url = "https://llm.api.cloud.yandex.net/foundationModels/v1/completion"
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Api-Key {config['api_key']}"
+    }
+
+    prompt = {
+        "modelUri": f"gpt://{config['catalog_id']}/yandexgpt/latest",
+        "completionOptions": {
+            "stream": False,
+            "temperature": temperature,
+            "maxTokens": 2000
+        },
+        "messages": messages
+    }
+
+    try:
+        response = requests.post(url, headers=headers, json=prompt)
+        response.raise_for_status()
+        result = response.json()
+
+        if "result" in result and "alternatives" in result["result"]:
+            return result["result"]["alternatives"][0]["message"]["text"]
+        else:
+            return "Ошибка: не удалось получить ответ"
+    except Exception as e:
+        return f"Ошибка: {str(e)}"
+
+
+def solve_direct(task):
+    """Способ 1: Прямой ответ без дополнительных инструкций"""
+    messages = [
+        {"role": "system", "text": DIRECT_PROMPT},
+        {"role": "user", "text": task}
+    ]
+    return call_yandex_gpt(messages)
+
+
+def solve_step_by_step(task):
+    """Способ 2: Пошаговое решение"""
+    messages = [
+        {"role": "system", "text": STEP_BY_STEP_PROMPT},
+        {"role": "user", "text": task}
+    ]
+    return call_yandex_gpt(messages)
+
+
+def solve_with_prompt_generator(task):
+    """Способ 3: Сначала генерируем промпт, затем решаем с его помощью"""
+    # Шаг 1: Генерируем оптимальный промпт
+    messages_generator = [
+        {"role": "system", "text": PROMPT_GENERATOR_INSTRUCTION},
+        {"role": "user", "text": f"Создай оптимальный промпт для решения следующей задачи:\n\n{task}"}
+    ]
+    generated_prompt = call_yandex_gpt(messages_generator)
+
+    # Шаг 2: Используем сгенерированный промпт для решения задачи
+    messages_solver = [
+        {"role": "system", "text": generated_prompt},
+        {"role": "user", "text": task}
+    ]
+    solution = call_yandex_gpt(messages_solver)
+
+    # Возвращаем и промпт, и решение
+    return f"=== СГЕНЕРИРОВАННЫЙ ПРОМПТ ===\n{generated_prompt}\n\n=== РЕШЕНИЕ С ИСПОЛЬЗОВАНИЕМ ПРОМПТА ===\n{solution}"
+
+
+def solve_with_expert_panel(task):
+    """Способ 4: Группа экспертов"""
+    messages = [
+        {"role": "system", "text": EXPERT_PANEL_PROMPT},
+        {"role": "user", "text": task}
+    ]
+    return call_yandex_gpt(messages, temperature=0.8)
+
+
 @app.route('/')
 def index():
     """Главная страница с чатом"""
@@ -423,6 +537,41 @@ def clear_recommendations():
     global recommendation_history
     recommendation_history = []
     return jsonify({'status': 'ok'})
+
+
+@app.route('/reasoning', methods=['POST'])
+def reasoning():
+    """Решение задачи разными способами рассуждения"""
+    data = request.json
+    task = data.get('task', '').strip()
+    method = data.get('method', 'all')  # all, direct, step_by_step, prompt_generator, expert_panel
+
+    if not task:
+        return jsonify({'error': 'Задача не указана'}), 400
+
+    results = {}
+
+    try:
+        if method == 'all' or method == 'direct':
+            results['direct'] = solve_direct(task)
+
+        if method == 'all' or method == 'step_by_step':
+            results['step_by_step'] = solve_step_by_step(task)
+
+        if method == 'all' or method == 'prompt_generator':
+            results['prompt_generator'] = solve_with_prompt_generator(task)
+
+        if method == 'all' or method == 'expert_panel':
+            results['expert_panel'] = solve_with_expert_panel(task)
+
+        return jsonify({
+            'task': task,
+            'method': method,
+            'results': results
+        })
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 if __name__ == '__main__':

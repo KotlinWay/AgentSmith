@@ -4,8 +4,13 @@ const sendBtn = document.getElementById('sendBtn');
 const clearBtn = document.getElementById('clearBtn');
 const infoModeBtn = document.getElementById('infoModeBtn');
 const recommendModeBtn = document.getElementById('recommendModeBtn');
+const reasoningModeBtn = document.getElementById('reasoningModeBtn');
+const reasoningContainer = document.getElementById('reasoningContainer');
+const chatInputContainer = document.getElementById('chatInputContainer');
+const taskInput = document.getElementById('taskInput');
+const reasoningResults = document.getElementById('reasoningResults');
 
-// Текущий режим работы: 'info' или 'recommend'
+// Текущий режим работы: 'info', 'recommend' или 'reasoning'
 let currentMode = 'info';
 
 function addMessage(text, isUser) {
@@ -302,6 +307,72 @@ function removeLoading() {
     }
 }
 
+async function solveTask(method) {
+    const task = taskInput.value.trim();
+    if (!task) {
+        alert('Пожалуйста, введите задачу для решения');
+        return;
+    }
+
+    // Отключаем кнопки и показываем загрузку
+    const methodButtons = document.querySelectorAll('.method-btn');
+    methodButtons.forEach(btn => btn.disabled = true);
+    taskInput.disabled = true;
+
+    reasoningResults.innerHTML = '<div class="loading-reasoning">⏳ Решаю задачу, это может занять некоторое время...</div>';
+
+    try {
+        const response = await fetch('/reasoning', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ task: task, method: method })
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+            displayReasoningResults(data);
+        } else {
+            reasoningResults.innerHTML = `<div class="error">Ошибка: ${data.error || 'Неизвестная ошибка'}</div>`;
+        }
+    } catch (error) {
+        reasoningResults.innerHTML = `<div class="error">Ошибка подключения: ${error.message}</div>`;
+    } finally {
+        methodButtons.forEach(btn => btn.disabled = false);
+        taskInput.disabled = false;
+    }
+}
+
+function displayReasoningResults(data) {
+    let html = '<div class="results-header">';
+    html += `<h3>Задача: ${escapeHtml(data.task)}</h3>`;
+    html += '</div>';
+
+    html += '<div class="results-container">';
+
+    const methodNames = {
+        'direct': '1️⃣ Прямой ответ',
+        'step_by_step': '2️⃣ Пошаговое решение',
+        'prompt_generator': '3️⃣ С промптом от ИИ',
+        'expert_panel': '4️⃣ Группа экспертов (🔬 Физик, 👵 Бабушка, 👦 Ребёнок, 🤖 Робот)'
+    };
+
+    for (const [method, result] of Object.entries(data.results)) {
+        html += '<div class="result-card">';
+        html += `<h4>${methodNames[method] || method}</h4>`;
+        html += '<div class="result-content">';
+        html += `<pre>${escapeHtml(result)}</pre>`;
+        html += '</div>';
+        html += '</div>';
+    }
+
+    html += '</div>';
+
+    reasoningResults.innerHTML = html;
+}
+
 async function sendMessage() {
     const message = messageInput.value.trim();
     if (!message) return;
@@ -348,31 +419,58 @@ function switchMode(mode) {
     currentMode = mode;
 
     // Обновляем активную кнопку
-    if (mode === 'info') {
-        infoModeBtn.classList.add('active');
-        recommendModeBtn.classList.remove('active');
-    } else {
-        infoModeBtn.classList.remove('active');
-        recommendModeBtn.classList.add('active');
+    infoModeBtn.classList.remove('active');
+    recommendModeBtn.classList.remove('active');
+    if (reasoningModeBtn) {
+        reasoningModeBtn.classList.remove('active');
     }
 
-    // Очищаем чат и показываем приветственное сообщение
     if (mode === 'info') {
-        chatMessages.innerHTML = `
-            <div class="message assistant">
-                <div class="message-content">Привет! Я агент Смит, твой справочник по фильмам. Введи название фильма.</div>
-            </div>
-        `;
-        // Очищаем историю на сервере
-        fetch('/clear', { method: 'POST' }).catch(console.error);
+        infoModeBtn.classList.add('active');
+    } else if (mode === 'recommend') {
+        recommendModeBtn.classList.add('active');
+    } else if (mode === 'reasoning' && reasoningModeBtn) {
+        reasoningModeBtn.classList.add('active');
+    }
+
+    // Показываем/скрываем интерфейсы
+    if (mode === 'reasoning' && reasoningContainer && chatInputContainer) {
+        chatMessages.style.display = 'none';
+        chatInputContainer.style.display = 'none';
+        reasoningContainer.style.display = 'block';
+        if (reasoningResults) {
+            reasoningResults.innerHTML = '';
+        }
+        if (taskInput) {
+            taskInput.value = '';
+        }
     } else {
-        chatMessages.innerHTML = `
-            <div class="message assistant">
-                <div class="message-content">Привет! Я помогу тебе подобрать идеальный фильм. Расскажи, что тебе нравится, в какой компании будешь смотреть и какое у тебя настроение? 🎬</div>
-            </div>
-        `;
-        // Очищаем историю рекомендаций на сервере
-        fetch('/clear_recommendations', { method: 'POST' }).catch(console.error);
+        chatMessages.style.display = 'flex';
+        if (chatInputContainer) {
+            chatInputContainer.style.display = 'flex';
+        }
+        if (reasoningContainer) {
+            reasoningContainer.style.display = 'none';
+        }
+
+        // Очищаем чат и показываем приветственное сообщение
+        if (mode === 'info') {
+            chatMessages.innerHTML = `
+                <div class="message assistant">
+                    <div class="message-content">Привет! Я агент Смит, твой справочник по фильмам. Введи название фильма.</div>
+                </div>
+            `;
+            // Очищаем историю на сервере
+            fetch('/clear', { method: 'POST' }).catch(console.error);
+        } else if (mode === 'recommend') {
+            chatMessages.innerHTML = `
+                <div class="message assistant">
+                    <div class="message-content">Привет! Я помогу тебе подобрать идеальный фильм. Расскажи, что тебе нравится, в какой компании будешь смотреть и какое у тебя настроение? 🎬</div>
+                </div>
+            `;
+            // Очищаем историю рекомендаций на сервере
+            fetch('/clear_recommendations', { method: 'POST' }).catch(console.error);
+        }
     }
 }
 
@@ -412,11 +510,22 @@ sendBtn.addEventListener('click', sendMessage);
 clearBtn.addEventListener('click', clearHistory);
 infoModeBtn.addEventListener('click', () => switchMode('info'));
 recommendModeBtn.addEventListener('click', () => switchMode('recommend'));
+if (reasoningModeBtn) {
+    reasoningModeBtn.addEventListener('click', () => switchMode('reasoning'));
+}
 
 messageInput.addEventListener('keypress', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         sendMessage();
+    }
+});
+
+// Обработчики для кнопок методов рассуждения
+document.addEventListener('click', (e) => {
+    if (e.target.classList.contains('method-btn')) {
+        const method = e.target.dataset.method;
+        solveTask(method);
     }
 });
 

@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
     <title>AgentSmith Chat</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=2">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=3">
 </head>
 <body>
     <div class="container">
@@ -13,6 +13,7 @@
             <div class="mode-switch">
                 <button id="infoModeBtn" class="mode-btn active">📚 Справочник</button>
                 <button id="recommendModeBtn" class="mode-btn">🎯 Рекомендатор</button>
+                <button id="reasoningModeBtn" class="mode-btn">🧠 Рассуждения</button>
             </div>
             <button id="clearBtn" class="clear-btn">Очистить</button>
         </div>
@@ -21,12 +22,32 @@
                 <div class="message-content">Привет! Я агент Смит, твой справочник по фильмам. Введи название фильма.</div>
             </div>
         </div>
-        <div class="chat-input-container">
+
+        <!-- Интерфейс для режима рассуждений -->
+        <div class="reasoning-container" id="reasoningContainer" style="display: none;">
+            <div class="reasoning-task">
+                <label for="taskInput">Введите задачу для решения:</label>
+                <textarea id="taskInput" placeholder="Например: У фермера есть 17 овец. Все, кроме 9, умерли. Сколько овец осталось?" rows="3"></textarea>
+            </div>
+            <div class="reasoning-methods">
+                <label>Выберите способ рассуждения:</label>
+                <div class="method-buttons">
+                    <button class="method-btn" data-method="all">Все способы</button>
+                    <button class="method-btn" data-method="direct">1. Прямой ответ</button>
+                    <button class="method-btn" data-method="step_by_step">2. Пошагово</button>
+                    <button class="method-btn" data-method="prompt_generator">3. С промптом от ИИ</button>
+                    <button class="method-btn" data-method="expert_panel" title="Физик-ядерщик, Бабушка у подъезда, Ребёнок 7 лет, 300-летний робот из 2694 года">4. 🔬👵👦🤖 Группа экспертов</button>
+                </div>
+            </div>
+            <div class="reasoning-results" id="reasoningResults"></div>
+        </div>
+
+        <div class="chat-input-container" id="chatInputContainer">
             <input type="text" id="messageInput" placeholder="Введите ваше сообщение..." autocomplete="off">
             <button id="sendBtn">Отправить</button>
         </div>
     </div>
-    <script src="{{ url_for('static', filename='script.js') }}?v=2"></script>
+    <script src="{{ url_for('static', filename='script.js') }}?v=3"></script>
 </body>
 </html>
 
