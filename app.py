@@ -721,14 +721,15 @@ def call_yandex_model(model_key: str, prompt: str) -> Dict[str, Any]:
 
                 # Получаем реальные метрики токенов из ответа
                 usage = result["result"].get("usage", {})
-                input_tokens = usage.get("inputTextTokens", estimate_tokens(prompt))
-                output_tokens = usage.get("completionTokens", estimate_tokens(generated_text))
+                # Явно преобразуем в int, API может вернуть строки
+                input_tokens = int(usage.get("inputTextTokens", estimate_tokens(prompt)))
+                output_tokens = int(usage.get("completionTokens", estimate_tokens(generated_text)))
 
             total_tokens = input_tokens + output_tokens
 
             # Расчет стоимости в рублях
             pricing = model_info['pricing']
-            cost_rub = (input_tokens * pricing['input'] + output_tokens * pricing['output']) / 1000
+            cost_rub = (float(input_tokens) * pricing['input'] + float(output_tokens) * pricing['output']) / 1000
 
             return {
                 'success': True,
