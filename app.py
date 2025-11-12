@@ -3,6 +3,8 @@ import requests
 import json
 import os
 import re
+import time
+from typing import Dict, Any
 
 app = Flask(__name__)
 
@@ -621,6 +623,214 @@ def temperature_experiment():
         }
 
         return jsonify(analysis)
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# Функция для подсчета токенов (приблизительная оценка)
+def estimate_tokens(text: str) -> int:
+    """Приблизительная оценка количества токенов"""
+    # Простая эвристика: ~4 символа = 1 токен для английского
+    # Для русского языка: ~6 символов = 1 токен
+    words = text.split()
+    chars = len(text)
+    # Среднее между словами и символами
+    return max(len(words), chars // 5)
+
+
+# Доступные модели Yandex Cloud
+YANDEX_MODELS = {
+    'yandexgpt-lite': {
+        'uri': 'yandexgpt-lite/latest',
+        'name': 'YandexGPT Lite',
+        'description': 'Легковесная модель для быстрых ответов',
+        'pricing': {'input': 0.2, 'output': 0.6}  # руб за 1K токенов
+    },
+    'yandexgpt': {
+        'uri': 'yandexgpt/latest',
+        'name': 'YandexGPT',
+        'description': 'Стандартная модель с балансом качества и скорости',
+        'pricing': {'input': 0.4, 'output': 1.2}
+    },
+    'yandexgpt-32k': {
+        'uri': 'yandexgpt-32k/rc',
+        'name': 'YandexGPT 32K',
+        'description': 'Модель с расширенным контекстом',
+        'pricing': {'input': 0.8, 'output': 2.4}
+    },
+    'summarization': {
+        'uri': 'summarization/latest',
+        'name': 'Summarization',
+        'description': 'Специализированная модель для суммаризации',
+        'pricing': {'input': 0.4, 'output': 1.2}
+    }
+}
+
+
+def call_yandex_model(model_key: str, prompt: str) -> Dict[str, Any]:
+    """
+    Вызов модели Yandex Cloud через Foundation Models API
+    Возвращает результат с метриками
+    """
+    if model_key not in YANDEX_MODELS:
+        return {
+            'success': False,
+            'model': model_key,
+            'error': f"Неизвестная модель: {model_key}",
+            'metrics': {'response_time': 0}
+        }
+
+    model_info = YANDEX_MODELS[model_key]
+    model_uri = model_info['uri']
+
+    url = "https://llm.api.cloud.yandex.net/foundationModels/v1/completion"
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Api-Key {config['api_key']}"
+    }
+
+    payload = {
+        "modelUri": f"gpt://{config['catalog_id']}/{model_uri}",
+        "completionOptions": {
+            "stream": False,
+            "temperature": 0.7,
+            "maxTokens": 500
+        },
+        "messages": [
+            {"role": "user", "text": prompt}
+        ]
+    }
+
+    start_time = time.time()
+
+    try:
+        response = requests.post(url, headers=headers, json=payload, timeout=30)
+        elapsed_time = time.time() - start_time
+
+        if response.status_code == 200:
+            result = response.json()
+
+            # Извлечение текста ответа
+            generated_text = ""
+            input_tokens = 0
+            output_tokens = 0
+
+            if "result" in result and "alternatives" in result["result"]:
+                generated_text = result["result"]["alternatives"][0]["message"]["text"]
+
+                # Получаем реальные метрики токенов из ответа
+                usage = result["result"].get("usage", {})
+                # Явно преобразуем в int, API может вернуть строки
+                input_tokens = int(usage.get("inputTextTokens", estimate_tokens(prompt)))
+                output_tokens = int(usage.get("completionTokens", estimate_tokens(generated_text)))
+
+            total_tokens = input_tokens + output_tokens
+
+            # Расчет стоимости в рублях
+            pricing = model_info['pricing']
+            cost_rub = (float(input_tokens) * pricing['input'] + float(output_tokens) * pricing['output']) / 1000
+
+            return {
+                'success': True,
+                'model': model_key,
+                'model_name': model_info['name'],
+                'response': generated_text,
+                'metrics': {
+                    'response_time': round(elapsed_time, 3),
+                    'input_tokens': input_tokens,
+                    'output_tokens': output_tokens,
+                    'total_tokens': total_tokens,
+                    'cost_rub': round(cost_rub, 4),
+                    'is_free': False
+                }
+            }
+        else:
+            return {
+                'success': False,
+                'model': model_key,
+                'model_name': model_info['name'],
+                'error': f"HTTP {response.status_code}: {response.text[:200]}",
+                'metrics': {
+                    'response_time': round(time.time() - start_time, 3)
+                }
+            }
+
+    except Exception as e:
+        return {
+            'success': False,
+            'model': model_key,
+            'model_name': model_info.get('name', model_key),
+            'error': str(e),
+            'metrics': {
+                'response_time': round(time.time() - start_time, 3)
+            }
+        }
+
+
+@app.route('/model_comparison', methods=['POST'])
+def model_comparison():
+    """Сравнение разных моделей Yandex AI с замером метрик"""
+    data = request.json
+    prompt = data.get('prompt', '').strip()
+    models = data.get('models', [])
+
+    if not prompt:
+        return jsonify({'error': 'Запрос не указан'}), 400
+
+    if not models or len(models) < 2:
+        return jsonify({'error': 'Необходимо выбрать минимум 2 модели для сравнения'}), 400
+
+    results = []
+
+    try:
+        # Вызываем каждую модель
+        for model_key in models:
+            result = call_yandex_model(model_key, prompt)
+            results.append(result)
+
+        # Добавляем сравнительный анализ
+        successful_results = [r for r in results if r['success']]
+
+        comparison = {
+            'prompt': prompt,
+            'models_compared': len(models),
+            'successful_calls': len(successful_results),
+            'results': results
+        }
+
+        if successful_results:
+            # Находим самую быструю и медленную модель
+            fastest = min(successful_results, key=lambda x: x['metrics']['response_time'])
+            slowest = max(successful_results, key=lambda x: x['metrics']['response_time'])
+
+            # Находим модель с наименьшим количеством токенов
+            most_concise = min(successful_results, key=lambda x: x['metrics']['output_tokens'])
+            most_verbose = max(successful_results, key=lambda x: x['metrics']['output_tokens'])
+
+            # Находим самую дешевую и дорогую
+            cheapest = min(successful_results, key=lambda x: x['metrics']['cost_rub'])
+            most_expensive = max(successful_results, key=lambda x: x['metrics']['cost_rub'])
+
+            comparison['analysis'] = {
+                'fastest_model': fastest.get('model_name', fastest['model']),
+                'fastest_time': fastest['metrics']['response_time'],
+                'slowest_model': slowest.get('model_name', slowest['model']),
+                'slowest_time': slowest['metrics']['response_time'],
+                'most_concise_model': most_concise.get('model_name', most_concise['model']),
+                'most_concise_tokens': most_concise['metrics']['output_tokens'],
+                'most_verbose_model': most_verbose.get('model_name', most_verbose['model']),
+                'most_verbose_tokens': most_verbose['metrics']['output_tokens'],
+                'cheapest_model': cheapest.get('model_name', cheapest['model']),
+                'cheapest_cost': cheapest['metrics']['cost_rub'],
+                'most_expensive_model': most_expensive.get('model_name', most_expensive['model']),
+                'most_expensive_cost': most_expensive['metrics']['cost_rub'],
+                'avg_response_time': round(sum(r['metrics']['response_time'] for r in successful_results) / len(successful_results), 3),
+                'avg_output_tokens': round(sum(r['metrics']['output_tokens'] for r in successful_results) / len(successful_results), 1),
+                'avg_cost': round(sum(r['metrics']['cost_rub'] for r in successful_results) / len(successful_results), 4)
+            }
+
+        return jsonify(comparison)
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500

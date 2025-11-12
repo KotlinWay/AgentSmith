@@ -6,16 +6,21 @@ const infoModeBtn = document.getElementById('infoModeBtn');
 const recommendModeBtn = document.getElementById('recommendModeBtn');
 const reasoningModeBtn = document.getElementById('reasoningModeBtn');
 const temperatureModeBtn = document.getElementById('temperatureModeBtn');
+const comparisonModeBtn = document.getElementById('comparisonModeBtn');
 const reasoningContainer = document.getElementById('reasoningContainer');
 const temperatureContainer = document.getElementById('temperatureContainer');
+const comparisonContainer = document.getElementById('comparisonContainer');
 const chatInputContainer = document.getElementById('chatInputContainer');
 const taskInput = document.getElementById('taskInput');
 const reasoningResults = document.getElementById('reasoningResults');
 const temperaturePrompt = document.getElementById('temperaturePrompt');
 const temperatureResults = document.getElementById('temperatureResults');
 const runTemperatureBtn = document.getElementById('runTemperatureBtn');
+const comparisonPrompt = document.getElementById('comparisonPrompt');
+const comparisonResults = document.getElementById('comparisonResults');
+const runComparisonBtn = document.getElementById('runComparisonBtn');
 
-// Текущий режим работы: 'info', 'recommend', 'reasoning' или 'temperature'
+// Текущий режим работы: 'info', 'recommend', 'reasoning', 'temperature' или 'comparison'
 let currentMode = 'info';
 
 function addMessage(text, isUser) {
@@ -503,6 +508,179 @@ function displayTemperatureResults(data) {
     temperatureResults.innerHTML = html;
 }
 
+async function runModelComparison() {
+    const prompt = comparisonPrompt.value.trim();
+    if (!prompt) {
+        alert('Пожалуйста, введите запрос для тестирования');
+        return;
+    }
+
+    // Получаем выбранные модели
+    const checkboxes = document.querySelectorAll('.model-checkbox:checked');
+    const selectedModels = Array.from(checkboxes).map(cb => cb.value);
+
+    if (selectedModels.length < 2) {
+        alert('Пожалуйста, выберите минимум 2 модели для сравнения');
+        return;
+    }
+
+    // Отключаем кнопку и показываем загрузку
+    runComparisonBtn.disabled = true;
+    comparisonPrompt.disabled = true;
+    checkboxes.forEach(cb => cb.disabled = true);
+    comparisonResults.innerHTML = '<div class="loading-comparison">⏳ Запускаю сравнение моделей...<br>Это может занять некоторое время, так как запрашиваются разные модели HuggingFace API</div>';
+
+    try {
+        const response = await fetch('/model_comparison', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                prompt: prompt,
+                models: selectedModels
+            })
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+            displayComparisonResults(data);
+        } else {
+            comparisonResults.innerHTML = `<div class="error">Ошибка: ${data.error || 'Неизвестная ошибка'}</div>`;
+        }
+    } catch (error) {
+        comparisonResults.innerHTML = `<div class="error">Ошибка подключения: ${error.message}</div>`;
+    } finally {
+        runComparisonBtn.disabled = false;
+        comparisonPrompt.disabled = false;
+        checkboxes.forEach(cb => cb.disabled = false);
+    }
+}
+
+function displayComparisonResults(data) {
+    let html = '<div class="comparison-results-header">';
+    html += `<h3>📊 Результаты сравнения моделей</h3>`;
+    html += `<p class="comparison-prompt"><strong>Запрос:</strong> ${escapeHtml(data.prompt)}</p>`;
+    html += `<p class="comparison-stats"><strong>Сравнено моделей:</strong> ${data.models_compared} | <strong>Успешных вызовов:</strong> ${data.successful_calls}</p>`;
+    html += '</div>';
+
+    // Общий анализ (если есть)
+    if (data.analysis) {
+        html += '<div class="comparison-analysis">';
+        html += '<h3>📈 Общий анализ</h3>';
+        html += '<div class="analysis-grid">';
+
+        html += '<div class="analysis-card">';
+        html += '<h4>⚡ Самая быстрая</h4>';
+        html += `<p><strong>${escapeHtml(data.analysis.fastest_model)}</strong></p>`;
+        html += `<p class="metric">${data.analysis.fastest_time} сек</p>`;
+        html += '</div>';
+
+        html += '<div class="analysis-card">';
+        html += '<h4>🐌 Самая медленная</h4>';
+        html += `<p><strong>${escapeHtml(data.analysis.slowest_model)}</strong></p>`;
+        html += `<p class="metric">${data.analysis.slowest_time} сек</p>`;
+        html += '</div>';
+
+        html += '<div class="analysis-card">';
+        html += '<h4>📝 Самый краткий ответ</h4>';
+        html += `<p><strong>${escapeHtml(data.analysis.most_concise_model)}</strong></p>`;
+        html += `<p class="metric">${data.analysis.most_concise_tokens} токенов</p>`;
+        html += '</div>';
+
+        html += '<div class="analysis-card">';
+        html += '<h4>📚 Самый подробный ответ</h4>';
+        html += `<p><strong>${escapeHtml(data.analysis.most_verbose_model)}</strong></p>`;
+        html += `<p class="metric">${data.analysis.most_verbose_tokens} токенов</p>`;
+        html += '</div>';
+
+        html += '<div class="analysis-card">';
+        html += '<h4>💰 Самая дешевая</h4>';
+        html += `<p><strong>${escapeHtml(data.analysis.cheapest_model)}</strong></p>`;
+        html += `<p class="metric">${data.analysis.cheapest_cost} ₽</p>`;
+        html += '</div>';
+
+        html += '<div class="analysis-card">';
+        html += '<h4>💸 Самая дорогая</h4>';
+        html += `<p><strong>${escapeHtml(data.analysis.most_expensive_model)}</strong></p>`;
+        html += `<p class="metric">${data.analysis.most_expensive_cost} ₽</p>`;
+        html += '</div>';
+
+        html += '<div class="analysis-card">';
+        html += '<h4>⏱️ Среднее время</h4>';
+        html += `<p class="metric">${data.analysis.avg_response_time} сек</p>`;
+        html += '</div>';
+
+        html += '<div class="analysis-card">';
+        html += '<h4>💬 Средний размер ответа</h4>';
+        html += `<p class="metric">${data.analysis.avg_output_tokens} токенов</p>`;
+        html += '</div>';
+
+        html += '<div class="analysis-card">';
+        html += '<h4>💵 Средняя стоимость</h4>';
+        html += `<p class="metric">${data.analysis.avg_cost} ₽</p>`;
+        html += '</div>';
+
+        html += '</div>';
+        html += '</div>';
+    }
+
+    // Результаты каждой модели
+    html += '<div class="model-results-container">';
+
+    data.results.forEach((result, index) => {
+        const statusClass = result.success ? 'model-success' : 'model-error';
+        html += `<div class="model-result-card ${statusClass}">`;
+        html += `<div class="model-header">`;
+        const modelTitle = result.model_name ? `${result.model_name} (${result.model})` : result.model;
+        html += `<h4>${index + 1}. ${escapeHtml(modelTitle)}</h4>`;
+        html += result.success ? '<span class="status-badge success">✅ Успех</span>' : '<span class="status-badge error">❌ Ошибка</span>';
+        html += `</div>`;
+
+        if (result.success) {
+            // Метрики
+            html += '<div class="model-metrics">';
+            html += `<div class="metric-item"><span class="metric-label">⏱️ Время:</span> <span class="metric-value">${result.metrics.response_time} сек</span></div>`;
+            html += `<div class="metric-item"><span class="metric-label">📥 Входных токенов:</span> <span class="metric-value">${result.metrics.input_tokens}</span></div>`;
+            html += `<div class="metric-item"><span class="metric-label">📤 Выходных токенов:</span> <span class="metric-value">${result.metrics.output_tokens}</span></div>`;
+            html += `<div class="metric-item"><span class="metric-label">📊 Всего токенов:</span> <span class="metric-value">${result.metrics.total_tokens}</span></div>`;
+            html += `<div class="metric-item"><span class="metric-label">💰 Стоимость:</span> <span class="metric-value">${result.metrics.cost_rub} ₽</span></div>`;
+            html += '</div>';
+
+            // Ответ модели
+            html += '<div class="model-response">';
+            html += '<h5>💬 Ответ модели:</h5>';
+            html += `<pre>${escapeHtml(result.response)}</pre>`;
+            html += '</div>';
+        } else {
+            // Ошибка
+            html += '<div class="model-error-message">';
+            html += `<p><strong>Ошибка:</strong> ${escapeHtml(result.error)}</p>`;
+            html += `<p><strong>Время до ошибки:</strong> ${result.metrics.response_time} сек</p>`;
+            html += '</div>';
+        }
+
+        html += '</div>';
+    });
+
+    html += '</div>';
+
+    // Выводы
+    html += '<div class="comparison-conclusions">';
+    html += '<h3>📝 Выводы</h3>';
+    html += '<ul>';
+    html += '<li><strong>Скорость:</strong> YandexGPT Lite обычно быстрее стандартной модели, но YandexGPT 32K может работать дольше из-за расширенного контекста.</li>';
+    html += '<li><strong>Качество:</strong> Стандартная модель YandexGPT обеспечивает хороший баланс качества и скорости, YandexGPT 32K лучше работает с большими контекстами.</li>';
+    html += '<li><strong>Токены:</strong> Разные модели генерируют разное количество токенов. Больше токенов не всегда означает лучше - важна содержательность.</li>';
+    html += '<li><strong>Стоимость:</strong> YandexGPT Lite самая экономичная (0.2₽/1K входных токенов), YandexGPT 32K самая дорогая (0.8₽/1K входных токенов).</li>';
+    html += '<li><strong>Специализация:</strong> Модель Summarization специализируется на суммаризации текстов, остальные - универсальные языковые модели.</li>';
+    html += '</ul>';
+    html += '</div>';
+
+    comparisonResults.innerHTML = html;
+}
+
 async function sendMessage() {
     const message = messageInput.value.trim();
     if (!message) return;
@@ -557,6 +735,9 @@ function switchMode(mode) {
     if (temperatureModeBtn) {
         temperatureModeBtn.classList.remove('active');
     }
+    if (comparisonModeBtn) {
+        comparisonModeBtn.classList.remove('active');
+    }
 
     if (mode === 'info') {
         infoModeBtn.classList.add('active');
@@ -566,6 +747,8 @@ function switchMode(mode) {
         reasoningModeBtn.classList.add('active');
     } else if (mode === 'temperature' && temperatureModeBtn) {
         temperatureModeBtn.classList.add('active');
+    } else if (mode === 'comparison' && comparisonModeBtn) {
+        comparisonModeBtn.classList.add('active');
     }
 
     // Показываем/скрываем интерфейсы
@@ -575,6 +758,9 @@ function switchMode(mode) {
         reasoningContainer.style.display = 'block';
         if (temperatureContainer) {
             temperatureContainer.style.display = 'none';
+        }
+        if (comparisonContainer) {
+            comparisonContainer.style.display = 'none';
         }
         if (reasoningResults) {
             reasoningResults.innerHTML = '';
@@ -589,11 +775,30 @@ function switchMode(mode) {
             reasoningContainer.style.display = 'none';
         }
         temperatureContainer.style.display = 'block';
+        if (comparisonContainer) {
+            comparisonContainer.style.display = 'none';
+        }
         if (temperatureResults) {
             temperatureResults.innerHTML = '';
         }
         if (temperaturePrompt) {
             temperaturePrompt.value = '';
+        }
+    } else if (mode === 'comparison' && comparisonContainer && chatInputContainer) {
+        chatMessages.style.display = 'none';
+        chatInputContainer.style.display = 'none';
+        if (reasoningContainer) {
+            reasoningContainer.style.display = 'none';
+        }
+        if (temperatureContainer) {
+            temperatureContainer.style.display = 'none';
+        }
+        comparisonContainer.style.display = 'block';
+        if (comparisonResults) {
+            comparisonResults.innerHTML = '';
+        }
+        if (comparisonPrompt) {
+            comparisonPrompt.value = '';
         }
     } else {
         chatMessages.style.display = 'flex';
@@ -605,6 +810,9 @@ function switchMode(mode) {
         }
         if (temperatureContainer) {
             temperatureContainer.style.display = 'none';
+        }
+        if (comparisonContainer) {
+            comparisonContainer.style.display = 'none';
         }
 
         // Очищаем чат и показываем приветственное сообщение
@@ -670,8 +878,14 @@ if (reasoningModeBtn) {
 if (temperatureModeBtn) {
     temperatureModeBtn.addEventListener('click', () => switchMode('temperature'));
 }
+if (comparisonModeBtn) {
+    comparisonModeBtn.addEventListener('click', () => switchMode('comparison'));
+}
 if (runTemperatureBtn) {
     runTemperatureBtn.addEventListener('click', runTemperatureExperiment);
+}
+if (runComparisonBtn) {
+    runComparisonBtn.addEventListener('click', runModelComparison);
 }
 
 messageInput.addEventListener('keypress', (e) => {
