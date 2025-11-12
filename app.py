@@ -639,81 +639,117 @@ def estimate_tokens(text: str) -> int:
     return max(len(words), chars // 5)
 
 
-# Цены моделей (приблизительные, в USD за 1M токенов)
-MODEL_PRICING = {
-    'gpt2': {'input': 0, 'output': 0},  # Бесплатная
-    'distilgpt2': {'input': 0, 'output': 0},  # Бесплатная
-    'microsoft/DialoGPT-medium': {'input': 0, 'output': 0},  # Бесплатная
-    'EleutherAI/gpt-neo-125M': {'input': 0, 'output': 0},  # Бесплатная
-    'facebook/opt-350m': {'input': 0, 'output': 0},  # Бесплатная
-    'google/flan-t5-base': {'input': 0, 'output': 0},  # Бесплатная
+# Доступные модели Yandex Cloud
+YANDEX_MODELS = {
+    'yandexgpt-lite': {
+        'uri': 'yandexgpt-lite/latest',
+        'name': 'YandexGPT Lite',
+        'description': 'Легковесная модель для быстрых ответов',
+        'pricing': {'input': 0.2, 'output': 0.6}  # руб за 1K токенов
+    },
+    'yandexgpt': {
+        'uri': 'yandexgpt/latest',
+        'name': 'YandexGPT',
+        'description': 'Стандартная модель с балансом качества и скорости',
+        'pricing': {'input': 0.4, 'output': 1.2}
+    },
+    'yandexgpt-32k': {
+        'uri': 'yandexgpt-32k/rc',
+        'name': 'YandexGPT 32K',
+        'description': 'Модель с расширенным контекстом',
+        'pricing': {'input': 0.8, 'output': 2.4}
+    },
+    'summarization': {
+        'uri': 'summarization/latest',
+        'name': 'Summarization',
+        'description': 'Специализированная модель для суммаризации',
+        'pricing': {'input': 0.4, 'output': 1.2}
+    }
 }
 
 
-def call_huggingface_model(model_name: str, prompt: str, hf_token: str = None) -> Dict[str, Any]:
+def call_yandex_model(model_key: str, prompt: str) -> Dict[str, Any]:
     """
-    Вызов модели из HuggingFace через Inference API
+    Вызов модели Yandex Cloud через Foundation Models API
     Возвращает результат с метриками
     """
-    api_url = f"https://router.huggingface.co/hf-inference/{model_name}"
+    if model_key not in YANDEX_MODELS:
+        return {
+            'success': False,
+            'model': model_key,
+            'error': f"Неизвестная модель: {model_key}",
+            'metrics': {'response_time': 0}
+        }
 
-    headers = {}
-    if hf_token:
-        headers["Authorization"] = f"Bearer {hf_token}"
+    model_info = YANDEX_MODELS[model_key]
+    model_uri = model_info['uri']
+
+    url = "https://llm.api.cloud.yandex.net/foundationModels/v1/completion"
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Api-Key {config['api_key']}"
+    }
 
     payload = {
-        "inputs": prompt,
-        "parameters": {
-            "max_new_tokens": 150,
+        "modelUri": f"gpt://{config['catalog_id']}/{model_uri}",
+        "completionOptions": {
+            "stream": False,
             "temperature": 0.7,
-            "return_full_text": False
-        }
+            "maxTokens": 500
+        },
+        "messages": [
+            {"role": "user", "text": prompt}
+        ]
     }
 
     start_time = time.time()
 
     try:
-        response = requests.post(api_url, headers=headers, json=payload, timeout=30)
+        response = requests.post(url, headers=headers, json=payload, timeout=30)
         elapsed_time = time.time() - start_time
 
         if response.status_code == 200:
             result = response.json()
 
             # Извлечение текста ответа
-            if isinstance(result, list) and len(result) > 0:
-                generated_text = result[0].get('generated_text', '')
-            elif isinstance(result, dict):
-                generated_text = result.get('generated_text', str(result))
-            else:
-                generated_text = str(result)
+            generated_text = ""
+            input_tokens = 0
+            output_tokens = 0
 
-            # Подсчет токенов
-            input_tokens = estimate_tokens(prompt)
-            output_tokens = estimate_tokens(generated_text)
+            if "result" in result and "alternatives" in result["result"]:
+                generated_text = result["result"]["alternatives"][0]["message"]["text"]
+
+                # Получаем реальные метрики токенов из ответа
+                usage = result["result"].get("usage", {})
+                input_tokens = usage.get("inputTextTokens", estimate_tokens(prompt))
+                output_tokens = usage.get("completionTokens", estimate_tokens(generated_text))
+
             total_tokens = input_tokens + output_tokens
 
-            # Расчет стоимости
-            pricing = MODEL_PRICING.get(model_name, {'input': 0, 'output': 0})
-            cost = (input_tokens * pricing['input'] + output_tokens * pricing['output']) / 1_000_000
+            # Расчет стоимости в рублях
+            pricing = model_info['pricing']
+            cost_rub = (input_tokens * pricing['input'] + output_tokens * pricing['output']) / 1000
 
             return {
                 'success': True,
-                'model': model_name,
+                'model': model_key,
+                'model_name': model_info['name'],
                 'response': generated_text,
                 'metrics': {
                     'response_time': round(elapsed_time, 3),
                     'input_tokens': input_tokens,
                     'output_tokens': output_tokens,
                     'total_tokens': total_tokens,
-                    'cost_usd': round(cost, 6),
-                    'is_free': pricing['input'] == 0 and pricing['output'] == 0
+                    'cost_rub': round(cost_rub, 4),
+                    'is_free': False
                 }
             }
         else:
             return {
                 'success': False,
-                'model': model_name,
-                'error': f"HTTP {response.status_code}: {response.text}",
+                'model': model_key,
+                'model_name': model_info['name'],
+                'error': f"HTTP {response.status_code}: {response.text[:200]}",
                 'metrics': {
                     'response_time': round(time.time() - start_time, 3)
                 }
@@ -722,7 +758,8 @@ def call_huggingface_model(model_name: str, prompt: str, hf_token: str = None) -
     except Exception as e:
         return {
             'success': False,
-            'model': model_name,
+            'model': model_key,
+            'model_name': model_info.get('name', model_key),
             'error': str(e),
             'metrics': {
                 'response_time': round(time.time() - start_time, 3)
@@ -732,11 +769,10 @@ def call_huggingface_model(model_name: str, prompt: str, hf_token: str = None) -
 
 @app.route('/model_comparison', methods=['POST'])
 def model_comparison():
-    """Сравнение разных моделей AI с замером метрик"""
+    """Сравнение разных моделей Yandex AI с замером метрик"""
     data = request.json
     prompt = data.get('prompt', '').strip()
     models = data.get('models', [])
-    hf_token = config.get('huggingface_token')  # Опционально
 
     if not prompt:
         return jsonify({'error': 'Запрос не указан'}), 400
@@ -748,8 +784,8 @@ def model_comparison():
 
     try:
         # Вызываем каждую модель
-        for model_name in models:
-            result = call_huggingface_model(model_name, prompt, hf_token)
+        for model_key in models:
+            result = call_yandex_model(model_key, prompt)
             results.append(result)
 
         # Добавляем сравнительный анализ
@@ -771,17 +807,26 @@ def model_comparison():
             most_concise = min(successful_results, key=lambda x: x['metrics']['output_tokens'])
             most_verbose = max(successful_results, key=lambda x: x['metrics']['output_tokens'])
 
+            # Находим самую дешевую и дорогую
+            cheapest = min(successful_results, key=lambda x: x['metrics']['cost_rub'])
+            most_expensive = max(successful_results, key=lambda x: x['metrics']['cost_rub'])
+
             comparison['analysis'] = {
-                'fastest_model': fastest['model'],
+                'fastest_model': fastest.get('model_name', fastest['model']),
                 'fastest_time': fastest['metrics']['response_time'],
-                'slowest_model': slowest['model'],
+                'slowest_model': slowest.get('model_name', slowest['model']),
                 'slowest_time': slowest['metrics']['response_time'],
-                'most_concise_model': most_concise['model'],
+                'most_concise_model': most_concise.get('model_name', most_concise['model']),
                 'most_concise_tokens': most_concise['metrics']['output_tokens'],
-                'most_verbose_model': most_verbose['model'],
+                'most_verbose_model': most_verbose.get('model_name', most_verbose['model']),
                 'most_verbose_tokens': most_verbose['metrics']['output_tokens'],
+                'cheapest_model': cheapest.get('model_name', cheapest['model']),
+                'cheapest_cost': cheapest['metrics']['cost_rub'],
+                'most_expensive_model': most_expensive.get('model_name', most_expensive['model']),
+                'most_expensive_cost': most_expensive['metrics']['cost_rub'],
                 'avg_response_time': round(sum(r['metrics']['response_time'] for r in successful_results) / len(successful_results), 3),
-                'avg_output_tokens': round(sum(r['metrics']['output_tokens'] for r in successful_results) / len(successful_results), 1)
+                'avg_output_tokens': round(sum(r['metrics']['output_tokens'] for r in successful_results) / len(successful_results), 1),
+                'avg_cost': round(sum(r['metrics']['cost_rub'] for r in successful_results) / len(successful_results), 4)
             }
 
         return jsonify(comparison)

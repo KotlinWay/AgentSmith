@@ -596,6 +596,18 @@ function displayComparisonResults(data) {
         html += '</div>';
 
         html += '<div class="analysis-card">';
+        html += '<h4>💰 Самая дешевая</h4>';
+        html += `<p><strong>${escapeHtml(data.analysis.cheapest_model)}</strong></p>`;
+        html += `<p class="metric">${data.analysis.cheapest_cost} ₽</p>`;
+        html += '</div>';
+
+        html += '<div class="analysis-card">';
+        html += '<h4>💸 Самая дорогая</h4>';
+        html += `<p><strong>${escapeHtml(data.analysis.most_expensive_model)}</strong></p>`;
+        html += `<p class="metric">${data.analysis.most_expensive_cost} ₽</p>`;
+        html += '</div>';
+
+        html += '<div class="analysis-card">';
         html += '<h4>⏱️ Среднее время</h4>';
         html += `<p class="metric">${data.analysis.avg_response_time} сек</p>`;
         html += '</div>';
@@ -603,6 +615,11 @@ function displayComparisonResults(data) {
         html += '<div class="analysis-card">';
         html += '<h4>💬 Средний размер ответа</h4>';
         html += `<p class="metric">${data.analysis.avg_output_tokens} токенов</p>`;
+        html += '</div>';
+
+        html += '<div class="analysis-card">';
+        html += '<h4>💵 Средняя стоимость</h4>';
+        html += `<p class="metric">${data.analysis.avg_cost} ₽</p>`;
         html += '</div>';
 
         html += '</div>';
@@ -616,7 +633,8 @@ function displayComparisonResults(data) {
         const statusClass = result.success ? 'model-success' : 'model-error';
         html += `<div class="model-result-card ${statusClass}">`;
         html += `<div class="model-header">`;
-        html += `<h4>${index + 1}. ${escapeHtml(result.model)}</h4>`;
+        const modelTitle = result.model_name ? `${result.model_name} (${result.model})` : result.model;
+        html += `<h4>${index + 1}. ${escapeHtml(modelTitle)}</h4>`;
         html += result.success ? '<span class="status-badge success">✅ Успех</span>' : '<span class="status-badge error">❌ Ошибка</span>';
         html += `</div>`;
 
@@ -627,11 +645,7 @@ function displayComparisonResults(data) {
             html += `<div class="metric-item"><span class="metric-label">📥 Входных токенов:</span> <span class="metric-value">${result.metrics.input_tokens}</span></div>`;
             html += `<div class="metric-item"><span class="metric-label">📤 Выходных токенов:</span> <span class="metric-value">${result.metrics.output_tokens}</span></div>`;
             html += `<div class="metric-item"><span class="metric-label">📊 Всего токенов:</span> <span class="metric-value">${result.metrics.total_tokens}</span></div>`;
-            if (result.metrics.is_free) {
-                html += `<div class="metric-item"><span class="metric-label">💰 Стоимость:</span> <span class="metric-value free">Бесплатно</span></div>`;
-            } else {
-                html += `<div class="metric-item"><span class="metric-label">💰 Стоимость:</span> <span class="metric-value">$${result.metrics.cost_usd}</span></div>`;
-            }
+            html += `<div class="metric-item"><span class="metric-label">💰 Стоимость:</span> <span class="metric-value">${result.metrics.cost_rub} ₽</span></div>`;
             html += '</div>';
 
             // Ответ модели
@@ -656,11 +670,11 @@ function displayComparisonResults(data) {
     html += '<div class="comparison-conclusions">';
     html += '<h3>📝 Выводы</h3>';
     html += '<ul>';
-    html += '<li><strong>Скорость:</strong> Разные модели имеют разное время отклика. Более легкие модели (distilgpt2) обычно быстрее, но могут быть менее качественными.</li>';
-    html += '<li><strong>Качество:</strong> Более крупные модели (GPT-Neo, OPT) обычно дают более качественные и связные ответы, но работают медленнее.</li>';
+    html += '<li><strong>Скорость:</strong> YandexGPT Lite обычно быстрее стандартной модели, но YandexGPT 32K может работать дольше из-за расширенного контекста.</li>';
+    html += '<li><strong>Качество:</strong> Стандартная модель YandexGPT обеспечивает хороший баланс качества и скорости, YandexGPT 32K лучше работает с большими контекстами.</li>';
     html += '<li><strong>Токены:</strong> Разные модели генерируют разное количество токенов. Больше токенов не всегда означает лучше - важна содержательность.</li>';
-    html += '<li><strong>Стоимость:</strong> Все выбранные модели бесплатны через HuggingFace Inference API, но имеют ограничения по количеству запросов.</li>';
-    html += '<li><strong>Специализация:</strong> DialoGPT лучше подходит для диалогов, FLAN-T5 для инструкций, GPT-2 для общего текста.</li>';
+    html += '<li><strong>Стоимость:</strong> YandexGPT Lite самая экономичная (0.2₽/1K входных токенов), YandexGPT 32K самая дорогая (0.8₽/1K входных токенов).</li>';
+    html += '<li><strong>Специализация:</strong> Модель Summarization специализируется на суммаризации текстов, остальные - универсальные языковые модели.</li>';
     html += '</ul>';
     html += '</div>';
 
