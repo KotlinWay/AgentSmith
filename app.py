@@ -695,7 +695,7 @@ def call_yandex_model(model_key: str, prompt: str) -> Dict[str, Any]:
         "completionOptions": {
             "stream": False,
             "temperature": 0.7,
-            "maxTokens": 500
+            "maxTokens": 2000  # Увеличено до 2000 для более полных ответов
         },
         "messages": [
             {"role": "user", "text": prompt}
