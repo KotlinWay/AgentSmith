@@ -752,79 +752,182 @@ function displayTokenResult(data, resultDiv, testType) {
     html += `<div class="token-metric-value">${data.estimated_input_tokens}</div>`;
     html += '</div>';
 
-    html += '<div class="token-metric-item">';
-    html += '<div class="token-metric-label">Модель</div>';
-    html += `<div class="token-metric-value">${escapeHtml(data.model_name)}</div>`;
-    html += '</div>';
-
-    html += '<div class="token-metric-item">';
-    html += '<div class="token-metric-label">Лимит модели</div>';
-    html += `<div class="token-metric-value">${data.model_limit}</div>`;
-    html += '</div>';
-
     html += '</div>';
     html += '</div>';
 
-    // Результаты
-    if (data.result.success) {
-        const metrics = data.result.metrics;
+    // Режим сравнения для экстремального теста
+    if (data.comparison_mode) {
+        html += '<h5 style="margin-top: 20px; color: #ff9800;">🔬 Сравнение моделей</h5>';
 
-        html += '<div class="token-metrics">';
-        html += '<h5>✅ Результаты обработки</h5>';
-        html += '<div class="token-metrics-grid">';
+        // Базовая модель
+        html += '<div style="border: 2px solid #ff5722; border-radius: 10px; padding: 15px; margin-top: 15px;">';
+        html += `<h5 style="color: #ff5722;">❌ ${escapeHtml(data.base_model.model_name)} (лимит: ${data.base_model.model_limit})</h5>`;
 
-        html += '<div class="token-metric-item">';
-        html += '<div class="token-metric-label">⏱️ Время ответа</div>';
-        html += `<div class="token-metric-value success">${metrics.response_time} сек</div>`;
+        if (data.base_model.result.success) {
+            const metrics = data.base_model.result.metrics;
+            html += '<div class="token-metrics-grid">';
+
+            html += '<div class="token-metric-item">';
+            html += '<div class="token-metric-label">⏱️ Время</div>';
+            html += `<div class="token-metric-value">${metrics.response_time} сек</div>`;
+            html += '</div>';
+
+            html += '<div class="token-metric-item">';
+            html += '<div class="token-metric-label">📥 Входные токены</div>';
+            html += `<div class="token-metric-value">${metrics.input_tokens}</div>`;
+            html += '</div>';
+
+            html += '<div class="token-metric-item">';
+            html += '<div class="token-metric-label">📤 Выходные токены</div>';
+            html += `<div class="token-metric-value">${metrics.output_tokens}</div>`;
+            html += '</div>';
+
+            html += '<div class="token-metric-item">';
+            html += '<div class="token-metric-label">💰 Стоимость</div>';
+            html += `<div class="token-metric-value">${metrics.cost_rub} ₽</div>`;
+            html += '</div>';
+
+            html += '</div>';
+
+            const limitPercent = (metrics.input_tokens / data.base_model.model_limit) * 100;
+            const limitClass = limitPercent > 90 ? 'danger' : (limitPercent > 70 ? 'warning' : '');
+
+            html += '<div class="token-progress-bar" style="margin-top: 10px;">';
+            html += `<div class="token-progress-fill ${limitClass}" style="width: ${Math.min(limitPercent, 100)}%">`;
+            html += `${limitPercent.toFixed(1)}% лимита`;
+            html += '</div>';
+            html += '</div>';
+
+            const previewText = data.base_model.result.response.substring(0, 300) + '...';
+            html += `<p style="margin-top: 10px; font-size: 12px; color: #666;">${escapeHtml(previewText)}</p>`;
+        } else {
+            html += `<p style="color: #d32f2f; font-weight: bold;">⚠️ Ошибка: ${escapeHtml(data.base_model.result.error)}</p>`;
+            html += '<p style="font-size: 12px; color: #666;">Запрос слишком велик для этой модели!</p>';
+        }
+
         html += '</div>';
 
-        html += '<div class="token-metric-item">';
-        html += '<div class="token-metric-label">📥 Входные токены</div>';
-        html += `<div class="token-metric-value">${metrics.input_tokens}</div>`;
+        // 32K модель
+        html += '<div style="border: 2px solid #4caf50; border-radius: 10px; padding: 15px; margin-top: 15px;">';
+        html += `<h5 style="color: #4caf50;">✅ ${escapeHtml(data.extended_model.model_name)} (лимит: ${data.extended_model.model_limit})</h5>`;
+
+        if (data.extended_model.result.success) {
+            const metrics = data.extended_model.result.metrics;
+            html += '<div class="token-metrics-grid">';
+
+            html += '<div class="token-metric-item">';
+            html += '<div class="token-metric-label">⏱️ Время</div>';
+            html += `<div class="token-metric-value">${metrics.response_time} сек</div>`;
+            html += '</div>';
+
+            html += '<div class="token-metric-item">';
+            html += '<div class="token-metric-label">📥 Входные токены</div>';
+            html += `<div class="token-metric-value">${metrics.input_tokens}</div>`;
+            html += '</div>';
+
+            html += '<div class="token-metric-item">';
+            html += '<div class="token-metric-label">📤 Выходные токены</div>';
+            html += `<div class="token-metric-value">${metrics.output_tokens}</div>`;
+            html += '</div>';
+
+            html += '<div class="token-metric-item">';
+            html += '<div class="token-metric-label">💰 Стоимость</div>';
+            html += `<div class="token-metric-value">${metrics.cost_rub} ₽</div>`;
+            html += '</div>';
+
+            html += '</div>';
+
+            const limitPercent = (metrics.input_tokens / data.extended_model.model_limit) * 100;
+            const limitClass = limitPercent > 90 ? 'danger' : (limitPercent > 70 ? 'warning' : '');
+
+            html += '<div class="token-progress-bar" style="margin-top: 10px;">';
+            html += `<div class="token-progress-fill ${limitClass}" style="width: ${Math.min(limitPercent, 100)}%">`;
+            html += `${limitPercent.toFixed(1)}% лимита`;
+            html += '</div>';
+            html += '</div>';
+
+            const previewText = data.extended_model.result.response.substring(0, 300) + '...';
+            html += `<p style="margin-top: 10px; font-size: 12px; color: #666;">${escapeHtml(previewText)}</p>`;
+        } else {
+            html += `<p style="color: #d32f2f; font-weight: bold;">⚠️ Ошибка: ${escapeHtml(data.extended_model.result.error)}</p>`;
+        }
+
         html += '</div>';
 
-        html += '<div class="token-metric-item">';
-        html += '<div class="token-metric-label">📤 Выходные токены</div>';
-        html += `<div class="token-metric-value">${metrics.output_tokens}</div>`;
-        html += '</div>';
-
-        html += '<div class="token-metric-item">';
-        html += '<div class="token-metric-label">📊 Всего токенов</div>';
-        html += `<div class="token-metric-value">${metrics.total_tokens}</div>`;
-        html += '</div>';
-
-        html += '<div class="token-metric-item">';
-        html += '<div class="token-metric-label">💰 Стоимость</div>';
-        html += `<div class="token-metric-value">${metrics.cost_rub} ₽</div>`;
-        html += '</div>';
-
-        html += '</div>';
-
-        // Прогресс-бар использования лимита
-        const limitPercent = (metrics.input_tokens / data.model_limit) * 100;
-        const limitClass = limitPercent > 80 ? 'danger' : (limitPercent > 50 ? 'warning' : '');
-
-        html += '<div class="token-progress-bar">';
-        html += `<div class="token-progress-fill ${limitClass}" style="width: ${Math.min(limitPercent, 100)}%">`;
-        html += `${limitPercent.toFixed(1)}% лимита`;
-        html += '</div>';
-        html += '</div>';
-
-        html += '</div>';
-
-        // Предпросмотр ответа
-        html += '<div class="token-response-preview">';
-        html += '<h5>💬 Превью ответа</h5>';
-        const previewText = data.result.response.substring(0, 500) + (data.result.response.length > 500 ? '...' : '');
-        html += `<div class="token-response-text">${escapeHtml(previewText)}</div>`;
+        // Вывод
+        html += '<div style="background: #fff3cd; border-radius: 10px; padding: 15px; margin-top: 15px;">';
+        html += '<h5 style="color: #856404;">💡 Вывод</h5>';
+        if (data.base_model.result.success && data.extended_model.result.success) {
+            html += '<p>Обе модели справились с запросом. Базовая модель достаточна для этого размера.</p>';
+        } else if (!data.base_model.result.success && data.extended_model.result.success) {
+            html += '<p><strong>Базовая модель не справилась</strong> (превышен лимит 8000 токенов), но <strong>YandexGPT 32K успешно обработала запрос</strong>. Это демонстрирует необходимость использования модели с расширенным контекстом для больших запросов.</p>';
+        } else {
+            html += '<p>Обе модели вернули ошибки. Возможно проблема с API или запрос некорректен.</p>';
+        }
         html += '</div>';
 
     } else {
-        // Ошибка
-        html += '<div class="token-error">';
-        html += '<h5>❌ Ошибка обработки</h5>';
-        html += `<p>${escapeHtml(data.result.error)}</p>`;
-        html += '</div>';
+        // Обычный режим (для коротких и длинных запросов)
+        if (data.result.success) {
+            const metrics = data.result.metrics;
+
+            html += '<div class="token-metrics">';
+            html += '<h5>✅ Результаты обработки</h5>';
+            html += '<div class="token-metrics-grid">';
+
+            html += '<div class="token-metric-item">';
+            html += '<div class="token-metric-label">⏱️ Время ответа</div>';
+            html += `<div class="token-metric-value success">${metrics.response_time} сек</div>`;
+            html += '</div>';
+
+            html += '<div class="token-metric-item">';
+            html += '<div class="token-metric-label">📥 Входные токены</div>';
+            html += `<div class="token-metric-value">${metrics.input_tokens}</div>`;
+            html += '</div>';
+
+            html += '<div class="token-metric-item">';
+            html += '<div class="token-metric-label">📤 Выходные токены</div>';
+            html += `<div class="token-metric-value">${metrics.output_tokens}</div>`;
+            html += '</div>';
+
+            html += '<div class="token-metric-item">';
+            html += '<div class="token-metric-label">📊 Всего токенов</div>';
+            html += `<div class="token-metric-value">${metrics.total_tokens}</div>`;
+            html += '</div>';
+
+            html += '<div class="token-metric-item">';
+            html += '<div class="token-metric-label">💰 Стоимость</div>';
+            html += `<div class="token-metric-value">${metrics.cost_rub} ₽</div>`;
+            html += '</div>';
+
+            html += '</div>';
+
+            // Прогресс-бар использования лимита
+            const limitPercent = (metrics.input_tokens / data.model_limit) * 100;
+            const limitClass = limitPercent > 80 ? 'danger' : (limitPercent > 50 ? 'warning' : '');
+
+            html += '<div class="token-progress-bar">';
+            html += `<div class="token-progress-fill ${limitClass}" style="width: ${Math.min(limitPercent, 100)}%">`;
+            html += `${limitPercent.toFixed(1)}% лимита`;
+            html += '</div>';
+            html += '</div>';
+
+            html += '</div>';
+
+            // Предпросмотр ответа
+            html += '<div class="token-response-preview">';
+            html += '<h5>💬 Превью ответа</h5>';
+            const previewText = data.result.response.substring(0, 500) + (data.result.response.length > 500 ? '...' : '');
+            html += `<div class="token-response-text">${escapeHtml(previewText)}</div>`;
+            html += '</div>';
+
+        } else {
+            // Ошибка
+            html += '<div class="token-error">';
+            html += '<h5>❌ Ошибка обработки</h5>';
+            html += `<p>${escapeHtml(data.result.error)}</p>`;
+            html += '</div>';
+        }
     }
 
     resultDiv.innerHTML = html;
