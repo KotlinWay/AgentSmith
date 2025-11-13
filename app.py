@@ -768,6 +768,67 @@ def call_yandex_model(model_key: str, prompt: str) -> Dict[str, Any]:
         }
 
 
+@app.route('/token_test', methods=['POST'])
+def token_test():
+    """Тестирование токенов с разными размерами запросов"""
+    data = request.json
+    prompt = data.get('prompt', '').strip()
+    test_type = data.get('test_type', 'short')  # short, long, extreme
+
+    if not prompt:
+        return jsonify({'error': 'Запрос не указан'}), 400
+
+    # Оценка количества токенов в запросе
+    estimated_input_tokens = estimate_tokens(prompt)
+
+    # Выбираем модель в зависимости от типа теста
+    if test_type == 'extreme':
+        # Для экстремального теста используем YandexGPT 32K
+        model_key = 'yandexgpt-32k'
+    else:
+        # Для коротких и длинных запросов используем стандартную модель
+        model_key = 'yandexgpt'
+
+    try:
+        # Тестируем запрос
+        result = call_yandex_model(model_key, prompt)
+
+        # Добавляем дополнительную информацию
+        response_data = {
+            'test_type': test_type,
+            'prompt': prompt,
+            'prompt_length': len(prompt),
+            'estimated_input_tokens': estimated_input_tokens,
+            'model_used': model_key,
+            'model_name': YANDEX_MODELS[model_key]['name'],
+            'model_limit': 32000 if model_key == 'yandexgpt-32k' else 8000,
+            'result': result
+        }
+
+        # Анализ результата
+        if result['success']:
+            actual_input_tokens = result['metrics']['input_tokens']
+            actual_output_tokens = result['metrics']['output_tokens']
+            total_tokens = result['metrics']['total_tokens']
+
+            response_data['analysis'] = {
+                'within_limit': actual_input_tokens < response_data['model_limit'],
+                'token_efficiency': round((actual_output_tokens / actual_input_tokens) if actual_input_tokens > 0 else 0, 2),
+                'cost_per_token': round(result['metrics']['cost_rub'] / total_tokens, 6) if total_tokens > 0 else 0,
+                'response_quality': 'Ответ получен успешно' if actual_output_tokens > 50 else 'Короткий ответ'
+            }
+        else:
+            response_data['analysis'] = {
+                'within_limit': False,
+                'error_type': 'API Error' if 'HTTP' in result['error'] else 'Unknown Error'
+            }
+
+        return jsonify(response_data)
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/model_comparison', methods=['POST'])
 def model_comparison():
     """Сравнение разных моделей Yandex AI с замером метрик"""

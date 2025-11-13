@@ -7,9 +7,11 @@ const recommendModeBtn = document.getElementById('recommendModeBtn');
 const reasoningModeBtn = document.getElementById('reasoningModeBtn');
 const temperatureModeBtn = document.getElementById('temperatureModeBtn');
 const comparisonModeBtn = document.getElementById('comparisonModeBtn');
+const tokensModeBtn = document.getElementById('tokensModeBtn');
 const reasoningContainer = document.getElementById('reasoningContainer');
 const temperatureContainer = document.getElementById('temperatureContainer');
 const comparisonContainer = document.getElementById('comparisonContainer');
+const tokensContainer = document.getElementById('tokensContainer');
 const chatInputContainer = document.getElementById('chatInputContainer');
 const taskInput = document.getElementById('taskInput');
 const reasoningResults = document.getElementById('reasoningResults');
@@ -20,7 +22,7 @@ const comparisonPrompt = document.getElementById('comparisonPrompt');
 const comparisonResults = document.getElementById('comparisonResults');
 const runComparisonBtn = document.getElementById('runComparisonBtn');
 
-// Текущий режим работы: 'info', 'recommend', 'reasoning', 'temperature' или 'comparison'
+// Текущий режим работы: 'info', 'recommend', 'reasoning', 'temperature', 'comparison' или 'tokens'
 let currentMode = 'info';
 
 function addMessage(text, isUser) {
@@ -681,6 +683,191 @@ function displayComparisonResults(data) {
     comparisonResults.innerHTML = html;
 }
 
+async function runTokenTest(testType) {
+    const promptMap = {
+        'short': document.getElementById('shortPrompt').value,
+        'long': document.getElementById('longPrompt').value,
+        'extreme': document.getElementById('extremePrompt').value
+    };
+
+    const resultMap = {
+        'short': document.getElementById('shortResult'),
+        'long': document.getElementById('longResult'),
+        'extreme': document.getElementById('extremeResult')
+    };
+
+    const prompt = promptMap[testType];
+    const resultDiv = resultMap[testType];
+    const btn = document.querySelector(`[data-type="${testType}"]`);
+
+    if (!prompt || !resultDiv) return;
+
+    // Отключаем кнопку и показываем загрузку
+    btn.disabled = true;
+    resultDiv.innerHTML = '<div class="token-loading">⏳ Тестируем...</div>';
+    resultDiv.classList.add('visible');
+
+    try {
+        const response = await fetch('/token_test', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                prompt: prompt,
+                test_type: testType
+            })
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+            displayTokenResult(data, resultDiv, testType);
+            updateTokenConclusions();
+        } else {
+            resultDiv.innerHTML = `<div class="token-error">❌ Ошибка: ${data.error || 'Неизвестная ошибка'}</div>`;
+        }
+    } catch (error) {
+        resultDiv.innerHTML = `<div class="token-error">❌ Ошибка подключения: ${error.message}</div>`;
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+function displayTokenResult(data, resultDiv, testType) {
+    let html = '';
+
+    // Информация о тесте
+    html += '<div class="token-metrics">';
+    html += '<h5>📊 Метрики запроса</h5>';
+    html += '<div class="token-metrics-grid">';
+
+    html += '<div class="token-metric-item">';
+    html += '<div class="token-metric-label">Длина промпта</div>';
+    html += `<div class="token-metric-value">${data.prompt_length} символов</div>`;
+    html += '</div>';
+
+    html += '<div class="token-metric-item">';
+    html += '<div class="token-metric-label">Оценка токенов</div>';
+    html += `<div class="token-metric-value">${data.estimated_input_tokens}</div>`;
+    html += '</div>';
+
+    html += '<div class="token-metric-item">';
+    html += '<div class="token-metric-label">Модель</div>';
+    html += `<div class="token-metric-value">${escapeHtml(data.model_name)}</div>`;
+    html += '</div>';
+
+    html += '<div class="token-metric-item">';
+    html += '<div class="token-metric-label">Лимит модели</div>';
+    html += `<div class="token-metric-value">${data.model_limit}</div>`;
+    html += '</div>';
+
+    html += '</div>';
+    html += '</div>';
+
+    // Результаты
+    if (data.result.success) {
+        const metrics = data.result.metrics;
+
+        html += '<div class="token-metrics">';
+        html += '<h5>✅ Результаты обработки</h5>';
+        html += '<div class="token-metrics-grid">';
+
+        html += '<div class="token-metric-item">';
+        html += '<div class="token-metric-label">⏱️ Время ответа</div>';
+        html += `<div class="token-metric-value success">${metrics.response_time} сек</div>`;
+        html += '</div>';
+
+        html += '<div class="token-metric-item">';
+        html += '<div class="token-metric-label">📥 Входные токены</div>';
+        html += `<div class="token-metric-value">${metrics.input_tokens}</div>`;
+        html += '</div>';
+
+        html += '<div class="token-metric-item">';
+        html += '<div class="token-metric-label">📤 Выходные токены</div>';
+        html += `<div class="token-metric-value">${metrics.output_tokens}</div>`;
+        html += '</div>';
+
+        html += '<div class="token-metric-item">';
+        html += '<div class="token-metric-label">📊 Всего токенов</div>';
+        html += `<div class="token-metric-value">${metrics.total_tokens}</div>`;
+        html += '</div>';
+
+        html += '<div class="token-metric-item">';
+        html += '<div class="token-metric-label">💰 Стоимость</div>';
+        html += `<div class="token-metric-value">${metrics.cost_rub} ₽</div>`;
+        html += '</div>';
+
+        html += '</div>';
+
+        // Прогресс-бар использования лимита
+        const limitPercent = (metrics.input_tokens / data.model_limit) * 100;
+        const limitClass = limitPercent > 80 ? 'danger' : (limitPercent > 50 ? 'warning' : '');
+
+        html += '<div class="token-progress-bar">';
+        html += `<div class="token-progress-fill ${limitClass}" style="width: ${Math.min(limitPercent, 100)}%">`;
+        html += `${limitPercent.toFixed(1)}% лимита`;
+        html += '</div>';
+        html += '</div>';
+
+        html += '</div>';
+
+        // Предпросмотр ответа
+        html += '<div class="token-response-preview">';
+        html += '<h5>💬 Превью ответа</h5>';
+        const previewText = data.result.response.substring(0, 500) + (data.result.response.length > 500 ? '...' : '');
+        html += `<div class="token-response-text">${escapeHtml(previewText)}</div>`;
+        html += '</div>';
+
+    } else {
+        // Ошибка
+        html += '<div class="token-error">';
+        html += '<h5>❌ Ошибка обработки</h5>';
+        html += `<p>${escapeHtml(data.result.error)}</p>`;
+        html += '</div>';
+    }
+
+    resultDiv.innerHTML = html;
+}
+
+function updateTokenConclusions() {
+    const conclusionsDiv = document.getElementById('tokensConclusions');
+    const contentDiv = document.getElementById('tokensConclusionContent');
+
+    if (!conclusionsDiv || !contentDiv) return;
+
+    let html = '';
+
+    html += '<div class="conclusion-item">';
+    html += '<h4>🎯 Короткие запросы (5-20 токенов)</h4>';
+    html += '<p>Оптимальны для простых вопросов и быстрых команд. Низкая стоимость, быстрый ответ. Модель YandexGPT обрабатывает такие запросы за доли секунды.</p>';
+    html += '</div>';
+
+    html += '<div class="conclusion-item">';
+    html += '<h4>📝 Длинные запросы (200-500 токенов)</h4>';
+    html += '<p>Подходят для детальных инструкций и сложных задач. Стоимость умеренная, время обработки приемлемое. Модель может генерировать более контекстуальные и детальные ответы.</p>';
+    html += '</div>';
+
+    html += '<div class="conclusion-item">';
+    html += '<h4>⚠️ Экстремальные запросы (>8000 токенов)</h4>';
+    html += '<p>Превышают лимит базовых моделей YandexGPT и YandexGPT Lite (8000 токенов). Для таких запросов необходимо использовать YandexGPT 32K с лимитом 32000 токенов. Высокая стоимость, требуют больше времени на обработку.</p>';
+    html += '</div>';
+
+    html += '<div class="conclusion-item">';
+    html += '<h4>💡 Рекомендации</h4>';
+    html += '<ul style="margin-left: 20px; margin-top: 8px;">';
+    html += '<li>Используйте YandexGPT Lite для коротких запросов - это экономично</li>';
+    html += '<li>YandexGPT подходит для большинства задач средней сложности</li>';
+    html += '<li>YandexGPT 32K используйте только для длинных контекстов</li>';
+    html += '<li>Оптимизируйте запросы - убирайте лишние слова и повторения</li>';
+    html += '<li>Помните: стоимость зависит как от входных, так и от выходных токенов</li>';
+    html += '</ul>';
+    html += '</div>';
+
+    contentDiv.innerHTML = html;
+    conclusionsDiv.style.display = 'block';
+}
+
 async function sendMessage() {
     const message = messageInput.value.trim();
     if (!message) return;
@@ -738,6 +925,9 @@ function switchMode(mode) {
     if (comparisonModeBtn) {
         comparisonModeBtn.classList.remove('active');
     }
+    if (tokensModeBtn) {
+        tokensModeBtn.classList.remove('active');
+    }
 
     if (mode === 'info') {
         infoModeBtn.classList.add('active');
@@ -749,6 +939,8 @@ function switchMode(mode) {
         temperatureModeBtn.classList.add('active');
     } else if (mode === 'comparison' && comparisonModeBtn) {
         comparisonModeBtn.classList.add('active');
+    } else if (mode === 'tokens' && tokensModeBtn) {
+        tokensModeBtn.classList.add('active');
     }
 
     // Показываем/скрываем интерфейсы
@@ -794,12 +986,28 @@ function switchMode(mode) {
             temperatureContainer.style.display = 'none';
         }
         comparisonContainer.style.display = 'block';
+        if (tokensContainer) {
+            tokensContainer.style.display = 'none';
+        }
         if (comparisonResults) {
             comparisonResults.innerHTML = '';
         }
         if (comparisonPrompt) {
             comparisonPrompt.value = '';
         }
+    } else if (mode === 'tokens' && tokensContainer && chatInputContainer) {
+        chatMessages.style.display = 'none';
+        chatInputContainer.style.display = 'none';
+        if (reasoningContainer) {
+            reasoningContainer.style.display = 'none';
+        }
+        if (temperatureContainer) {
+            temperatureContainer.style.display = 'none';
+        }
+        if (comparisonContainer) {
+            comparisonContainer.style.display = 'none';
+        }
+        tokensContainer.style.display = 'block';
     } else {
         chatMessages.style.display = 'flex';
         if (chatInputContainer) {
@@ -813,6 +1021,9 @@ function switchMode(mode) {
         }
         if (comparisonContainer) {
             comparisonContainer.style.display = 'none';
+        }
+        if (tokensContainer) {
+            tokensContainer.style.display = 'none';
         }
 
         // Очищаем чат и показываем приветственное сообщение
@@ -887,6 +1098,17 @@ if (runTemperatureBtn) {
 if (runComparisonBtn) {
     runComparisonBtn.addEventListener('click', runModelComparison);
 }
+if (tokensModeBtn) {
+    tokensModeBtn.addEventListener('click', () => switchMode('tokens'));
+}
+
+// Обработчики для кнопок тестирования токенов
+document.addEventListener('click', (e) => {
+    if (e.target.classList.contains('token-test-btn')) {
+        const testType = e.target.dataset.type;
+        runTokenTest(testType);
+    }
+});
 
 messageInput.addEventListener('keypress', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
