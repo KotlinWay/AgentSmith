@@ -705,7 +705,7 @@ def call_yandex_model(model_key: str, prompt: str) -> Dict[str, Any]:
     start_time = time.time()
 
     try:
-        response = requests.post(url, headers=headers, json=payload, timeout=30)
+        response = requests.post(url, headers=headers, json=payload, timeout=180)  # Увеличен до 3 минут для больших запросов
         elapsed_time = time.time() - start_time
 
         if response.status_code == 200:
