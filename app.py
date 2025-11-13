@@ -695,7 +695,7 @@ def call_yandex_model(model_key: str, prompt: str) -> Dict[str, Any]:
         "completionOptions": {
             "stream": False,
             "temperature": 0.7,
-            "maxTokens": 500
+            "maxTokens": 8000  # Максимальный лимит - модель не ограничена
         },
         "messages": [
             {"role": "user", "text": prompt}
@@ -705,7 +705,7 @@ def call_yandex_model(model_key: str, prompt: str) -> Dict[str, Any]:
     start_time = time.time()
 
     try:
-        response = requests.post(url, headers=headers, json=payload, timeout=30)
+        response = requests.post(url, headers=headers, json=payload, timeout=180)  # Увеличен до 3 минут для больших запросов
         elapsed_time = time.time() - start_time
 
         if response.status_code == 200:
@@ -766,6 +766,117 @@ def call_yandex_model(model_key: str, prompt: str) -> Dict[str, Any]:
                 'response_time': float(round(time.time() - start_time, 3))
             }
         }
+
+
+@app.route('/token_test', methods=['POST'])
+def token_test():
+    """Тестирование токенов с разными размерами запросов"""
+    data = request.json
+    prompt = data.get('prompt', '').strip()
+    test_type = data.get('test_type', 'short')  # short, long, extreme
+
+    if not prompt:
+        return jsonify({'error': 'Запрос не указан'}), 400
+
+    # Оценка количества токенов в запросе
+    estimated_input_tokens = estimate_tokens(prompt)
+
+    try:
+        # Для экстремального теста пробуем обе модели для наглядного сравнения
+        if test_type == 'extreme':
+            # Сначала пробуем базовую модель (лимит 8000 токенов)
+            result_base = call_yandex_model('yandexgpt', prompt)
+            # Затем пробуем 32K модель (лимит 32000 токенов)
+            result_32k = call_yandex_model('yandexgpt-32k', prompt)
+
+            response_data = {
+                'test_type': test_type,
+                'prompt': prompt,
+                'prompt_length': len(prompt),
+                'estimated_input_tokens': estimated_input_tokens,
+                'comparison_mode': True,
+                'base_model': {
+                    'model_key': 'yandexgpt',
+                    'model_name': YANDEX_MODELS['yandexgpt']['name'],
+                    'model_limit': 8000,
+                    'result': result_base
+                },
+                'extended_model': {
+                    'model_key': 'yandexgpt-32k',
+                    'model_name': YANDEX_MODELS['yandexgpt-32k']['name'],
+                    'model_limit': 32000,
+                    'result': result_32k
+                }
+            }
+
+            # Анализ для базовой модели
+            if result_base['success']:
+                actual_input = result_base['metrics']['input_tokens']
+                response_data['base_model']['analysis'] = {
+                    'within_limit': actual_input < 8000,
+                    'limit_usage_percent': round((actual_input / 8000) * 100, 1)
+                }
+            else:
+                response_data['base_model']['analysis'] = {
+                    'within_limit': False,
+                    'error': 'Превышен лимит или ошибка API'
+                }
+
+            # Анализ для 32K модели
+            if result_32k['success']:
+                actual_input = result_32k['metrics']['input_tokens']
+                response_data['extended_model']['analysis'] = {
+                    'within_limit': actual_input < 32000,
+                    'limit_usage_percent': round((actual_input / 32000) * 100, 1)
+                }
+            else:
+                response_data['extended_model']['analysis'] = {
+                    'within_limit': False,
+                    'error': 'Превышен лимит или ошибка API'
+                }
+
+            return jsonify(response_data)
+
+        else:
+            # Для коротких и длинных запросов используем стандартную модель
+            model_key = 'yandexgpt'
+            result = call_yandex_model(model_key, prompt)
+
+            # Добавляем дополнительную информацию
+            response_data = {
+                'test_type': test_type,
+                'prompt': prompt,
+                'prompt_length': len(prompt),
+                'estimated_input_tokens': estimated_input_tokens,
+                'model_used': model_key,
+                'model_name': YANDEX_MODELS[model_key]['name'],
+                'model_limit': 8000,
+                'comparison_mode': False,
+                'result': result
+            }
+
+            # Анализ результата
+            if result['success']:
+                actual_input_tokens = result['metrics']['input_tokens']
+                actual_output_tokens = result['metrics']['output_tokens']
+                total_tokens = result['metrics']['total_tokens']
+
+                response_data['analysis'] = {
+                    'within_limit': actual_input_tokens < response_data['model_limit'],
+                    'token_efficiency': round((actual_output_tokens / actual_input_tokens) if actual_input_tokens > 0 else 0, 2),
+                    'cost_per_token': round(result['metrics']['cost_rub'] / total_tokens, 6) if total_tokens > 0 else 0,
+                    'response_quality': 'Ответ получен успешно' if actual_output_tokens > 50 else 'Короткий ответ'
+                }
+            else:
+                response_data['analysis'] = {
+                    'within_limit': False,
+                    'error_type': 'API Error' if 'HTTP' in result['error'] else 'Unknown Error'
+                }
+
+            return jsonify(response_data)
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/model_comparison', methods=['POST'])
