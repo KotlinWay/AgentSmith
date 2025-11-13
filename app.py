@@ -737,11 +737,11 @@ def call_yandex_model(model_key: str, prompt: str) -> Dict[str, Any]:
                 'model_name': model_info['name'],
                 'response': generated_text,
                 'metrics': {
-                    'response_time': round(elapsed_time, 3),
-                    'input_tokens': input_tokens,
-                    'output_tokens': output_tokens,
-                    'total_tokens': total_tokens,
-                    'cost_rub': round(cost_rub, 4),
+                    'response_time': float(round(elapsed_time, 3)),
+                    'input_tokens': int(input_tokens),
+                    'output_tokens': int(output_tokens),
+                    'total_tokens': int(total_tokens),
+                    'cost_rub': float(round(cost_rub, 4)),
                     'is_free': False
                 }
             }
@@ -752,7 +752,7 @@ def call_yandex_model(model_key: str, prompt: str) -> Dict[str, Any]:
                 'model_name': model_info['name'],
                 'error': f"HTTP {response.status_code}: {response.text[:200]}",
                 'metrics': {
-                    'response_time': round(time.time() - start_time, 3)
+                    'response_time': float(round(time.time() - start_time, 3))
                 }
             }
 
@@ -763,7 +763,7 @@ def call_yandex_model(model_key: str, prompt: str) -> Dict[str, Any]:
             'model_name': model_info.get('name', model_key),
             'error': str(e),
             'metrics': {
-                'response_time': round(time.time() - start_time, 3)
+                'response_time': float(round(time.time() - start_time, 3))
             }
         }
 
