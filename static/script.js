@@ -791,9 +791,11 @@ function displayTokenResult(data, resultDiv, testType) {
 
             const limitPercent = (metrics.input_tokens / data.base_model.model_limit) * 100;
             const limitClass = limitPercent > 90 ? 'danger' : (limitPercent > 70 ? 'warning' : '');
+            // Минимальная ширина 8% для видимости, но показываем реальный процент
+            const displayWidth = Math.max(8, Math.min(limitPercent, 100));
 
             html += '<div class="token-progress-bar" style="margin-top: 10px;">';
-            html += `<div class="token-progress-fill ${limitClass}" style="width: ${Math.min(limitPercent, 100)}%">`;
+            html += `<div class="token-progress-fill ${limitClass}" style="width: ${displayWidth}%">`;
             html += `${limitPercent.toFixed(1)}% лимита`;
             html += '</div>';
             html += '</div>';
@@ -839,9 +841,11 @@ function displayTokenResult(data, resultDiv, testType) {
 
             const limitPercent = (metrics.input_tokens / data.extended_model.model_limit) * 100;
             const limitClass = limitPercent > 90 ? 'danger' : (limitPercent > 70 ? 'warning' : '');
+            // Минимальная ширина 8% для видимости, но показываем реальный процент
+            const displayWidth = Math.max(8, Math.min(limitPercent, 100));
 
             html += '<div class="token-progress-bar" style="margin-top: 10px;">';
-            html += `<div class="token-progress-fill ${limitClass}" style="width: ${Math.min(limitPercent, 100)}%">`;
+            html += `<div class="token-progress-fill ${limitClass}" style="width: ${displayWidth}%">`;
             html += `${limitPercent.toFixed(1)}% лимита`;
             html += '</div>';
             html += '</div>';
@@ -905,9 +909,11 @@ function displayTokenResult(data, resultDiv, testType) {
             // Прогресс-бар использования лимита
             const limitPercent = (metrics.input_tokens / data.model_limit) * 100;
             const limitClass = limitPercent > 80 ? 'danger' : (limitPercent > 50 ? 'warning' : '');
+            // Минимальная ширина 8% для видимости, но показываем реальный процент
+            const displayWidth = Math.max(8, Math.min(limitPercent, 100));
 
             html += '<div class="token-progress-bar">';
-            html += `<div class="token-progress-fill ${limitClass}" style="width: ${Math.min(limitPercent, 100)}%">`;
+            html += `<div class="token-progress-fill ${limitClass}" style="width: ${displayWidth}%">`;
             html += `${limitPercent.toFixed(1)}% лимита`;
             html += '</div>';
             html += '</div>';
