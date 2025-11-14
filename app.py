@@ -85,8 +85,12 @@ class DialogHistoryManager:
         self.compression_count += 1
 
         # Формируем новую сжатую историю
+        system_message = f"""КОНТЕКСТ: Ранее в диалоге были даны следующие факты: {summary_text}
+
+Это только справочная информация для контекста. Твоя задача - отвечать на НОВЫЙ вопрос пользователя, который будет ниже. Не придумывай свои вопросы."""
+
         self.compressed_messages = [
-            {"role": "system", "text": f"Справочная информация из предыдущего диалога: {summary_text}\n\nПродолжай отвечать на новые вопросы пользователя, используя эту информацию только как дополнительный контекст."}
+            {"role": "system", "text": system_message}
         ]
         self.compressed_messages.extend(recent_messages)
 
@@ -99,11 +103,14 @@ class DialogHistoryManager:
         Создает краткое резюме из списка сообщений.
         Использует модель суммаризации Yandex Cloud.
         """
-        # Формируем текст для суммаризации
-        dialog_text = "\n".join([
-            f"{msg['role']}: {msg['text']}"
-            for msg in messages
-        ])
+        # ВАЖНО: Формируем текст ТОЛЬКО из ответов ассистента, без вопросов пользователя
+        assistant_responses = []
+        for msg in messages:
+            if msg['role'] == 'assistant':
+                assistant_responses.append(msg['text'])
+
+        # Объединяем все ответы ассистента
+        responses_text = "\n\n".join(assistant_responses)
 
         # Используем специализированную модель для суммаризации
         url = "https://llm.api.cloud.yandex.net/foundationModels/v1/completion"
@@ -122,7 +129,7 @@ class DialogHistoryManager:
             "messages": [
                 {
                     "role": "user",
-                    "text": f"Из следующего диалога извлеки только ФАКТЫ из ответов ассистента. НЕ включай вопросы пользователя. Перечисли основную информацию, которая обсуждалась. НЕ пиши 'пользователь спросил', 'обсуждались темы' или подобные фразы. Только сами факты в 2-3 предложениях:\n\n{dialog_text}"
+                    "text": f"Суммируй следующую информацию в 2-3 предложения. Это ответы на вопросы о Марсе и космических миссиях. Перечисли только ключевые факты, которые были упомянуты:\n\n{responses_text}"
                 }
             ]
         }
