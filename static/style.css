@@ -48,6 +48,30 @@ body {
     background: rgba(0, 0, 0, 0.2);
     padding: 4px;
     border-radius: 10px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    flex-wrap: nowrap;
+    max-width: 100%;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.3) rgba(0, 0, 0, 0.1);
+}
+
+.mode-switch::-webkit-scrollbar {
+    height: 6px;
+}
+
+.mode-switch::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.1);
+    border-radius: 10px;
+}
+
+.mode-switch::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 10px;
+}
+
+.mode-switch::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.5);
 }
 
 .mode-btn {
@@ -59,6 +83,8 @@ body {
     cursor: pointer;
     font-size: 14px;
     transition: all 0.3s ease;
+    white-space: nowrap;
+    flex-shrink: 0;
 }
 
 .mode-btn:hover {
