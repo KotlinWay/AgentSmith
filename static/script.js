@@ -8,10 +8,12 @@ const reasoningModeBtn = document.getElementById('reasoningModeBtn');
 const temperatureModeBtn = document.getElementById('temperatureModeBtn');
 const comparisonModeBtn = document.getElementById('comparisonModeBtn');
 const tokensModeBtn = document.getElementById('tokensModeBtn');
+const compressionModeBtn = document.getElementById('compressionModeBtn');
 const reasoningContainer = document.getElementById('reasoningContainer');
 const temperatureContainer = document.getElementById('temperatureContainer');
 const comparisonContainer = document.getElementById('comparisonContainer');
 const tokensContainer = document.getElementById('tokensContainer');
+const compressionDialogContainer = document.getElementById('compressionDialogContainer');
 const chatInputContainer = document.getElementById('chatInputContainer');
 const taskInput = document.getElementById('taskInput');
 const reasoningResults = document.getElementById('reasoningResults');
@@ -22,7 +24,16 @@ const comparisonPrompt = document.getElementById('comparisonPrompt');
 const comparisonResults = document.getElementById('comparisonResults');
 const runComparisonBtn = document.getElementById('runComparisonBtn');
 
-// Текущий режим работы: 'info', 'recommend', 'reasoning', 'temperature', 'comparison' или 'tokens'
+// Элементы режима сжатия
+const compressionMessages = document.getElementById('compressionMessages');
+const compressionMessageInput = document.getElementById('compressionMessageInput');
+const compressionSendBtn = document.getElementById('compressionSendBtn');
+const compressionCompareBtn = document.getElementById('compressionCompareBtn');
+const compressionStatsBtn = document.getElementById('compressionStatsBtn');
+const compressionClearBtn = document.getElementById('compressionClearBtn');
+const compressionComparisonResults = document.getElementById('compressionComparisonResults');
+
+// Текущий режим работы: 'info', 'recommend', 'reasoning', 'temperature', 'comparison', 'tokens' или 'compression'
 let currentMode = 'info';
 
 function addMessage(text, isUser) {
@@ -1037,6 +1048,9 @@ function switchMode(mode) {
     if (tokensModeBtn) {
         tokensModeBtn.classList.remove('active');
     }
+    if (compressionModeBtn) {
+        compressionModeBtn.classList.remove('active');
+    }
 
     if (mode === 'info') {
         infoModeBtn.classList.add('active');
@@ -1050,6 +1064,8 @@ function switchMode(mode) {
         comparisonModeBtn.classList.add('active');
     } else if (mode === 'tokens' && tokensModeBtn) {
         tokensModeBtn.classList.add('active');
+    } else if (mode === 'compression' && compressionModeBtn) {
+        compressionModeBtn.classList.add('active');
     }
 
     // Показываем/скрываем интерфейсы
@@ -1117,6 +1133,27 @@ function switchMode(mode) {
             comparisonContainer.style.display = 'none';
         }
         tokensContainer.style.display = 'block';
+        if (compressionDialogContainer) {
+            compressionDialogContainer.style.display = 'none';
+        }
+    } else if (mode === 'compression' && compressionDialogContainer && chatInputContainer) {
+        chatMessages.style.display = 'none';
+        chatInputContainer.style.display = 'none';
+        if (reasoningContainer) {
+            reasoningContainer.style.display = 'none';
+        }
+        if (temperatureContainer) {
+            temperatureContainer.style.display = 'none';
+        }
+        if (comparisonContainer) {
+            comparisonContainer.style.display = 'none';
+        }
+        if (tokensContainer) {
+            tokensContainer.style.display = 'none';
+        }
+        compressionDialogContainer.style.display = 'block';
+        // Обновляем статистику при открытии
+        updateCompressionStats();
     } else {
         chatMessages.style.display = 'flex';
         if (chatInputContainer) {
@@ -1133,6 +1170,9 @@ function switchMode(mode) {
         }
         if (tokensContainer) {
             tokensContainer.style.display = 'none';
+        }
+        if (compressionDialogContainer) {
+            compressionDialogContainer.style.display = 'none';
         }
 
         // Очищаем чат и показываем приветственное сообщение
@@ -1210,6 +1250,31 @@ if (runComparisonBtn) {
 if (tokensModeBtn) {
     tokensModeBtn.addEventListener('click', () => switchMode('tokens'));
 }
+if (compressionModeBtn) {
+    compressionModeBtn.addEventListener('click', () => switchMode('compression'));
+}
+
+// Обработчики для кнопок режима сжатия
+if (compressionSendBtn) {
+    compressionSendBtn.addEventListener('click', () => sendCompressionMessage('send'));
+}
+if (compressionCompareBtn) {
+    compressionCompareBtn.addEventListener('click', () => sendCompressionMessage('compare'));
+}
+if (compressionStatsBtn) {
+    compressionStatsBtn.addEventListener('click', updateCompressionStats);
+}
+if (compressionClearBtn) {
+    compressionClearBtn.addEventListener('click', clearCompressionHistory);
+}
+if (compressionMessageInput) {
+    compressionMessageInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendCompressionMessage('send');
+        }
+    });
+}
 
 // Обработчики для кнопок тестирования токенов
 document.addEventListener('click', (e) => {
@@ -1236,4 +1301,229 @@ document.addEventListener('click', (e) => {
 
 // Фокус на поле ввода при загрузке
 messageInput.focus();
+
+// ============= Функции для режима сжатия диалога =============
+
+function addCompressionMessage(text, isUser) {
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `message ${isUser ? 'user' : 'assistant'}`;
+
+    const contentDiv = document.createElement('div');
+    contentDiv.className = 'message-content';
+    contentDiv.textContent = text;
+
+    messageDiv.appendChild(contentDiv);
+    compressionMessages.appendChild(messageDiv);
+
+    // Прокрутка вниз
+    compressionMessages.scrollTop = compressionMessages.scrollHeight;
+}
+
+async function sendCompressionMessage(action) {
+    const message = compressionMessageInput.value.trim();
+
+    if (!message) {
+        alert('Пожалуйста, введите сообщение');
+        return;
+    }
+
+    // Добавляем сообщение пользователя
+    addCompressionMessage(message, true);
+
+    // Очищаем поле ввода
+    compressionMessageInput.value = '';
+
+    // Отключаем кнопки
+    compressionSendBtn.disabled = true;
+    compressionCompareBtn.disabled = true;
+
+    // Показываем индикатор загрузки
+    const loadingDiv = document.createElement('div');
+    loadingDiv.className = 'message assistant loading-message';
+    loadingDiv.innerHTML = '<div class="message-content">⏳ Обрабатываю запрос...</div>';
+    compressionMessages.appendChild(loadingDiv);
+    compressionMessages.scrollTop = compressionMessages.scrollHeight;
+
+    try {
+        const response = await fetch('/compression_test', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ message, action })
+        });
+
+        const data = await response.json();
+
+        // Удаляем индикатор загрузки
+        loadingDiv.remove();
+
+        if (!response.ok) {
+            addCompressionMessage(`❌ Ошибка: ${data.error || 'Неизвестная ошибка'}`, false);
+            return;
+        }
+
+        if (action === 'send') {
+            // Обычная отправка
+            addCompressionMessage(data.response, false);
+
+            // Обновляем статистику
+            if (data.compression_stats) {
+                updateCompressionStatsDisplay(data.compression_stats);
+            }
+
+            // Показываем метрики
+            const metricsText = `📊 Метрики: ${data.metrics.input_tokens} вх + ${data.metrics.output_tokens} вых = ${data.metrics.total_tokens} токенов | ⏱️ ${data.metrics.response_time}s | 💰 ${data.metrics.cost_rub}₽`;
+            addCompressionMessage(metricsText, false);
+
+        } else if (action === 'compare') {
+            // Сравнение
+            const comparison = data.comparison;
+
+            // Показываем результаты сравнения
+            compressionComparisonResults.style.display = 'block';
+
+            // С компрессией
+            document.getElementById('withCompressionResult').innerHTML = `
+                <div class="compression-result-item">
+                    <p><strong>Ответ:</strong> ${escapeHtml(comparison.with_compression.response.substring(0, 200))}...</p>
+                    <div class="metrics">
+                        <div>📊 Входные токены: ${comparison.with_compression.metrics.input_tokens}</div>
+                        <div>📊 Выходные токены: ${comparison.with_compression.metrics.output_tokens}</div>
+                        <div>📊 Всего токенов: ${comparison.with_compression.metrics.total_tokens}</div>
+                        <div>💰 Стоимость: ${comparison.with_compression.metrics.cost_rub}₽</div>
+                        <div>⏱️ Время: ${comparison.with_compression.metrics.response_time}s</div>
+                        <div>📝 Сообщений в истории: ${comparison.with_compression.metrics.history_messages}</div>
+                    </div>
+                </div>
+            `;
+
+            // Без компрессии
+            document.getElementById('withoutCompressionResult').innerHTML = `
+                <div class="compression-result-item">
+                    <p><strong>Ответ:</strong> ${escapeHtml(comparison.without_compression.response.substring(0, 200))}...</p>
+                    <div class="metrics">
+                        <div>📊 Входные токены: ${comparison.without_compression.metrics.input_tokens}</div>
+                        <div>📊 Выходные токены: ${comparison.without_compression.metrics.output_tokens}</div>
+                        <div>📊 Всего токенов: ${comparison.without_compression.metrics.total_tokens}</div>
+                        <div>💰 Стоимость: ${comparison.without_compression.metrics.cost_rub}₽</div>
+                        <div>⏱️ Время: ${comparison.without_compression.metrics.response_time}s</div>
+                        <div>📝 Сообщений в истории: ${comparison.without_compression.metrics.history_messages}</div>
+                    </div>
+                </div>
+            `;
+
+            // Экономия
+            document.getElementById('savingsContent').innerHTML = `
+                <div class="savings-metrics">
+                    <div class="savings-item highlight">
+                        <strong>📊 Сэкономлено токенов:</strong> ${comparison.savings.tokens_saved} (${comparison.savings.tokens_saved_percent}%)
+                    </div>
+                    <div class="savings-item highlight">
+                        <strong>💰 Сэкономлено денег:</strong> ${comparison.savings.cost_saved}₽ (${comparison.savings.cost_saved_percent}%)
+                    </div>
+                    <div class="savings-item">
+                        <strong>⏱️ Разница во времени:</strong> ${comparison.savings.time_difference}s
+                    </div>
+                </div>
+            `;
+
+            // Обновляем статистику
+            if (comparison.compression_stats) {
+                updateCompressionStatsDisplay(comparison.compression_stats);
+            }
+
+            // Добавляем сообщение в чат
+            addCompressionMessage(comparison.with_compression.response, false);
+            addCompressionMessage(`✅ Сравнение завершено! Экономия: ${comparison.savings.tokens_saved} токенов (${comparison.savings.tokens_saved_percent}%)`, false);
+        }
+
+    } catch (error) {
+        loadingDiv.remove();
+        addCompressionMessage(`❌ Ошибка подключения: ${error.message}`, false);
+    } finally {
+        // Включаем кнопки
+        compressionSendBtn.disabled = false;
+        compressionCompareBtn.disabled = false;
+        compressionMessageInput.focus();
+    }
+}
+
+async function updateCompressionStats() {
+    try {
+        const response = await fetch('/compression_test', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ action: 'stats' })
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.stats) {
+            updateCompressionStatsDisplay(data.stats);
+            addCompressionMessage('📊 Статистика обновлена', false);
+        }
+    } catch (error) {
+        console.error('Ошибка при обновлении статистики:', error);
+    }
+}
+
+function updateCompressionStatsDisplay(stats) {
+    document.getElementById('statTotalMessages').textContent = stats.total_messages || 0;
+    document.getElementById('statCompressedMessages').textContent = stats.compressed_messages || 0;
+    document.getElementById('statCompressionCount').textContent = stats.compression_count || 0;
+    document.getElementById('statTokensSaved').textContent = stats.total_tokens_saved || 0;
+    document.getElementById('statCurrentFullTokens').textContent = stats.current_full_tokens || 0;
+    document.getElementById('statCurrentCompressedTokens').textContent = stats.current_compressed_tokens || 0;
+    document.getElementById('statCompressionRatio').textContent = (stats.compression_ratio || 0) + '%';
+}
+
+async function clearCompressionHistory() {
+    if (!confirm('Очистить историю диалога и статистику?')) return;
+
+    try {
+        const response = await fetch('/compression_test', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ action: 'clear' })
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+            // Очищаем чат
+            compressionMessages.innerHTML = `
+                <div class="message assistant">
+                    <div class="message-content">
+                        Привет! Я готов к диалогу с автоматическим сжатием истории.
+                        При достижении 10 сообщений старые сообщения будут автоматически
+                        сжаты в краткое резюме. Давай начнем!
+                    </div>
+                </div>
+            `;
+
+            // Скрываем результаты сравнения
+            compressionComparisonResults.style.display = 'none';
+
+            // Обновляем статистику
+            updateCompressionStatsDisplay({
+                total_messages: 0,
+                compressed_messages: 0,
+                compression_count: 0,
+                total_tokens_saved: 0,
+                current_full_tokens: 0,
+                current_compressed_tokens: 0,
+                compression_ratio: 0
+            });
+
+            addCompressionMessage('✅ История очищена', false);
+        }
+    } catch (error) {
+        addCompressionMessage(`❌ Ошибка при очистке: ${error.message}`, false);
+    }
+}
 
