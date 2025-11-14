@@ -120,10 +120,11 @@ class DialogHistoryManager:
 
 ЗАПОМНИ: Ты отвечаешь ФАКТАМИ и ИНФОРМАЦИЕЙ, а НЕ задаешь вопросы!"""
 
+        # ВАЖНО: Сохраняем только system message в compressed_messages
+        # Актуальные сообщения будут браться из self.messages в get_history_for_api()
         self.compressed_messages = [
             {"role": "system", "text": system_message}
         ]
-        self.compressed_messages.extend(recent_messages)
 
         # Очищаем полную историю, оставляем только недавние сообщения
         self.messages = recent_messages.copy()
@@ -266,18 +267,26 @@ class DialogHistoryManager:
         should_use_compressed = use_compressed if use_compressed is not None else self.use_compression
 
         if should_use_compressed and self.compressed_messages:
-            return self.compressed_messages
+            # ВАЖНО: Формируем актуальную историю с system message + все текущие сообщения
+            # compressed_messages[0] - это system message с контекстом
+            # self.messages - это актуальные последние сообщения
+            return [self.compressed_messages[0]] + self.messages
         else:
             return self.messages
 
     def get_stats(self):
         """Получить статистику использования компрессии"""
         full_tokens = sum(estimate_tokens(msg["text"]) for msg in self.messages)
-        compressed_tokens = sum(estimate_tokens(msg["text"]) for msg in self.compressed_messages) if self.compressed_messages else full_tokens
+
+        # Если есть компрессия, считаем токены как: system message + актуальные сообщения
+        if self.compressed_messages:
+            compressed_tokens = sum(estimate_tokens(msg["text"]) for msg in self.compressed_messages) + full_tokens
+        else:
+            compressed_tokens = full_tokens
 
         return {
             "total_messages": len(self.messages),
-            "compressed_messages": len(self.compressed_messages),
+            "compressed_messages": len(self.compressed_messages) + len(self.messages) if self.compressed_messages else 0,
             "compression_count": self.compression_count,
             "total_tokens_saved": self.total_tokens_saved,
             "current_full_tokens": full_tokens,
