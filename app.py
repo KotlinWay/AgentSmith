@@ -85,23 +85,46 @@ class DialogHistoryManager:
         self.compression_count += 1
 
         # Формируем новую сжатую историю
-        system_message = f"""КОНТЕКСТ: Ранее в диалоге были даны следующие факты: {summary_text}
+        system_message = f"""КОНТЕКСТ ПРЕДЫДУЩЕГО ДИАЛОГА: {summary_text}
 
-Это только справочная информация для контекста. Твоя задача - отвечать на НОВЫЙ вопрос пользователя.
+═══════════════════════════════════════════════
+КРИТИЧЕСКИ ВАЖНЫЕ ИНСТРУКЦИИ ДЛЯ ТЕБЯ:
+═══════════════════════════════════════════════
 
-ВАЖНО - ПРИМЕРЫ ПРАВИЛЬНОГО ПОВЕДЕНИЯ:
-❌ НЕПРАВИЛЬНО: "Какие технические задачи нужно решить?"
-✅ ПРАВИЛЬНО: "Технические задачи включают..."
+1. ТЫ - АССИСТЕНТ, КОТОРЫЙ ОТВЕЧАЕТ НА ВОПРОСЫ
+2. ТЫ НЕ ЗАДАЕШЬ ВОПРОСЫ ПОЛЬЗОВАТЕЛЮ
+3. ТЫ НЕ ПРЕДЛАГАЕШЬ ТЕМЫ ДЛЯ ОБСУЖДЕНИЯ
 
-❌ НЕПРАВИЛЬНО: "Давайте обсудим риски миссии"
-✅ ПРАВИЛЬНО: "Основные риски миссии включают..."
+Твоя ЕДИНСТВЕННАЯ задача: прочитать последний вопрос пользователя и дать на него ПРЯМОЙ ОТВЕТ.
 
-Отвечай на вопрос пользователя ПРЯМО и ПО СУЩЕСТВУ. Не формулируй свои вопросы. Не предлагай обсудить темы."""
+Контекст выше - это ТОЛЬКО справочная информация. НЕ продолжай темы из контекста.
+Отвечай ТОЛЬКО на НОВЫЙ вопрос пользователя.
 
+═══════════════════════════════════════════════
+ПРИМЕРЫ ПРАВИЛЬНОГО И НЕПРАВИЛЬНОГО ПОВЕДЕНИЯ:
+═══════════════════════════════════════════════
+
+❌❌❌ КАТЕГОРИЧЕСКИ НЕПРАВИЛЬНО:
+"Какие технические задачи нужно решить?"
+"Какие риски могут возникнуть при поиске финансирования?"
+"Давайте обсудим риски миссии"
+"Хотите узнать больше о..."
+"Может быть стоит рассмотреть..."
+
+✅✅✅ ПРАВИЛЬНО:
+"Технические задачи включают..."
+"Основные риски миссии: 1) ... 2) ... 3) ..."
+"Шансы на успех зависят от..."
+
+═══════════════════════════════════════════════
+
+ЗАПОМНИ: Ты отвечаешь ФАКТАМИ и ИНФОРМАЦИЕЙ, а НЕ задаешь вопросы!"""
+
+        # ВАЖНО: Сохраняем только system message в compressed_messages
+        # Актуальные сообщения будут браться из self.messages в get_history_for_api()
         self.compressed_messages = [
             {"role": "system", "text": system_message}
         ]
-        self.compressed_messages.extend(recent_messages)
 
         # Очищаем полную историю, оставляем только недавние сообщения
         self.messages = recent_messages.copy()
@@ -132,13 +155,35 @@ class DialogHistoryManager:
             "modelUri": f"gpt://{config['catalog_id']}/summarization/latest",
             "completionOptions": {
                 "stream": False,
-                "temperature": 0.1,  # Снижаем температуру для более детерминированного результата
+                "temperature": 0.05,  # Максимально детерминированный результат
                 "maxTokens": 300
             },
             "messages": [
                 {
                     "role": "user",
-                    "text": f"Ты должен создать краткую справку из следующей информации. ВАЖНО: Пиши ТОЛЬКО ФАКТЫ в утвердительной форме. НЕ формулируй вопросы. НЕ пиши 'нужно ответить', 'следует обсудить' и т.п. Только сухие факты о том, что было сказано:\n\n{responses_text}\n\nТвоя справка (2-3 предложения, только факты):"
+                    "text": f"""Создай краткую справку из следующей информации.
+
+СТРОГИЕ ТРЕБОВАНИЯ:
+1. Пиши ТОЛЬКО ФАКТЫ - что было сказано, какая информация была дана
+2. Используй ТОЛЬКО утвердительные предложения (с точкой в конце)
+3. ЗАПРЕЩЕНО использовать вопросительные знаки (?)
+4. ЗАПРЕЩЕНО писать: "нужно", "следует", "необходимо", "давайте", "можно ли", "как", "какие", "почему"
+5. НЕ предлагай темы для обсуждения
+6. НЕ формулируй задачи или вопросы
+
+ПРАВИЛЬНЫЕ примеры:
+✅ "Обсуждалась структура вселенной, теория Большого взрыва и темная материя."
+✅ "Были рассмотрены варианты колонизации Марса и Луны, названы технические требования."
+
+НЕПРАВИЛЬНЫЕ примеры:
+❌ "Какие планеты лучше колонизировать?"
+❌ "Нужно обсудить риски миссии."
+❌ "Следует рассмотреть финансирование."
+
+Исходная информация:
+{responses_text}
+
+Твоя справка (2-3 предложения с точками, БЕЗ вопросов):"""
                 }
             ]
         }
@@ -170,6 +215,35 @@ class DialogHistoryManager:
                         # Удаляем начальные двоеточия и точки после удаления фразы
                         summary = summary.lstrip(':. ')
 
+                # КРИТИЧЕСКИ ВАЖНО: Удаляем ВСЕ предложения с вопросами
+                # Разбиваем на предложения и оставляем только утвердительные
+                sentences = summary.split('.')
+                filtered_sentences = []
+                for sentence in sentences:
+                    sentence = sentence.strip()
+                    if not sentence:
+                        continue
+                    # Удаляем предложения с вопросительными знаками
+                    if '?' in sentence:
+                        continue
+                    # Удаляем предложения, начинающиеся с вопросительных слов
+                    lower_sentence = sentence.lower()
+                    question_words = ['как', 'какой', 'какая', 'какие', 'почему', 'зачем', 'где',
+                                     'куда', 'когда', 'чем', 'кто', 'что', 'нужно ли', 'следует ли',
+                                     'можно ли', 'стоит ли']
+                    if any(lower_sentence.startswith(word) for word in question_words):
+                        continue
+                    # Удаляем предложения с модальными словами (предложения задач)
+                    modal_words = ['нужно', 'следует', 'необходимо', 'стоит', 'давайте']
+                    if any(word in lower_sentence for word in modal_words):
+                        continue
+                    filtered_sentences.append(sentence)
+
+                # Собираем обратно
+                summary = '. '.join(filtered_sentences)
+                if summary and not summary.endswith('.'):
+                    summary += '.'
+
                 return summary
             else:
                 # Фоллбэк: простое текстовое резюме
@@ -193,18 +267,26 @@ class DialogHistoryManager:
         should_use_compressed = use_compressed if use_compressed is not None else self.use_compression
 
         if should_use_compressed and self.compressed_messages:
-            return self.compressed_messages
+            # ВАЖНО: Формируем актуальную историю с system message + все текущие сообщения
+            # compressed_messages[0] - это system message с контекстом
+            # self.messages - это актуальные последние сообщения
+            return [self.compressed_messages[0]] + self.messages
         else:
             return self.messages
 
     def get_stats(self):
         """Получить статистику использования компрессии"""
         full_tokens = sum(estimate_tokens(msg["text"]) for msg in self.messages)
-        compressed_tokens = sum(estimate_tokens(msg["text"]) for msg in self.compressed_messages) if self.compressed_messages else full_tokens
+
+        # Если есть компрессия, считаем токены как: system message + актуальные сообщения
+        if self.compressed_messages:
+            compressed_tokens = sum(estimate_tokens(msg["text"]) for msg in self.compressed_messages) + full_tokens
+        else:
+            compressed_tokens = full_tokens
 
         return {
             "total_messages": len(self.messages),
-            "compressed_messages": len(self.compressed_messages),
+            "compressed_messages": len(self.compressed_messages) + len(self.messages) if self.compressed_messages else 0,
             "compression_count": self.compression_count,
             "total_tokens_saved": self.total_tokens_saved,
             "current_full_tokens": full_tokens,

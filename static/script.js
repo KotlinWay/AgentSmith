@@ -1374,7 +1374,7 @@ async function sendCompressionMessage(action) {
             if (data.compression_triggered) {
                 const compressionNotice = document.createElement('div');
                 compressionNotice.className = 'message assistant compression-notice';
-                compressionNotice.innerHTML = '<div class="message-content">🗜️ ВЫПОЛНЕНА КОМПРЕССИЯ ИСТОРИИ! Старые сообщения сжаты в краткое резюме.</div>';
+                compressionNotice.innerHTML = '<div class="message-content">🗜️ История диалога оптимизирована</div>';
                 compressionMessages.appendChild(compressionNotice);
                 compressionMessages.scrollTop = compressionMessages.scrollHeight;
             }
@@ -1513,9 +1513,7 @@ async function clearCompressionHistory() {
             compressionMessages.innerHTML = `
                 <div class="message assistant">
                     <div class="message-content">
-                        Привет! Я готов к диалогу с автоматическим сжатием истории.
-                        При достижении 10 сообщений старые сообщения будут автоматически
-                        сжаты в краткое резюме. Давай начнем!
+                        Привет! Я готов к диалогу. Давай начнем!
                     </div>
                 </div>
             `;
