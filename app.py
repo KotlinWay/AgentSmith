@@ -46,18 +46,23 @@ class DialogHistoryManager:
         self.total_tokens_saved = 0  # Общее количество сэкономленных токенов
 
     def add_message(self, role, text):
-        """Добавить новое сообщение в историю"""
+        """
+        Добавить новое сообщение в историю.
+        Возвращает True, если была выполнена компрессия, иначе False.
+        """
         message = {"role": role, "text": text}
         self.messages.append(message)
 
         # Проверяем, нужно ли выполнить компрессию
         if self.use_compression and len(self.messages) >= self.compression_threshold:
-            self._compress_history()
+            return self._compress_history()
+        return False
 
     def _compress_history(self):
         """
         Выполняет компрессию истории диалога.
         Создает summary из старых сообщений и сохраняет только недавние.
+        Возвращает True, если компрессия была выполнена успешно.
         """
         # Разделяем историю на две части:
         # 1. Старая часть для компрессии (все кроме последних 3 сообщений)
@@ -66,7 +71,7 @@ class DialogHistoryManager:
         recent_messages = self.messages[-3:]
 
         if len(messages_to_compress) < 2:
-            return  # Недостаточно сообщений для компрессии
+            return False  # Недостаточно сообщений для компрессии
 
         # Создаем summary из старых сообщений
         summary_text = self._create_summary(messages_to_compress)
@@ -80,24 +85,41 @@ class DialogHistoryManager:
         self.compression_count += 1
 
         # Формируем новую сжатую историю
+        system_message = f"""КОНТЕКСТ: Ранее в диалоге были даны следующие факты: {summary_text}
+
+Это только справочная информация для контекста. Твоя задача - отвечать на НОВЫЙ вопрос пользователя.
+
+ВАЖНО - ПРИМЕРЫ ПРАВИЛЬНОГО ПОВЕДЕНИЯ:
+❌ НЕПРАВИЛЬНО: "Какие технические задачи нужно решить?"
+✅ ПРАВИЛЬНО: "Технические задачи включают..."
+
+❌ НЕПРАВИЛЬНО: "Давайте обсудим риски миссии"
+✅ ПРАВИЛЬНО: "Основные риски миссии включают..."
+
+Отвечай на вопрос пользователя ПРЯМО и ПО СУЩЕСТВУ. Не формулируй свои вопросы. Не предлагай обсудить темы."""
+
         self.compressed_messages = [
-            {"role": "system", "text": f"[SUMMARY предыдущего диалога]: {summary_text}"}
+            {"role": "system", "text": system_message}
         ]
         self.compressed_messages.extend(recent_messages)
 
         # Очищаем полную историю, оставляем только недавние сообщения
         self.messages = recent_messages.copy()
+        return True
 
     def _create_summary(self, messages):
         """
         Создает краткое резюме из списка сообщений.
         Использует модель суммаризации Yandex Cloud.
         """
-        # Формируем текст для суммаризации
-        dialog_text = "\n".join([
-            f"{msg['role']}: {msg['text']}"
-            for msg in messages
-        ])
+        # ВАЖНО: Формируем текст ТОЛЬКО из ответов ассистента, без вопросов пользователя
+        assistant_responses = []
+        for msg in messages:
+            if msg['role'] == 'assistant':
+                assistant_responses.append(msg['text'])
+
+        # Объединяем все ответы ассистента
+        responses_text = "\n\n".join(assistant_responses)
 
         # Используем специализированную модель для суммаризации
         url = "https://llm.api.cloud.yandex.net/foundationModels/v1/completion"
@@ -110,13 +132,13 @@ class DialogHistoryManager:
             "modelUri": f"gpt://{config['catalog_id']}/summarization/latest",
             "completionOptions": {
                 "stream": False,
-                "temperature": 0.3,
-                "maxTokens": 500
+                "temperature": 0.1,  # Снижаем температуру для более детерминированного результата
+                "maxTokens": 300
             },
             "messages": [
                 {
                     "role": "user",
-                    "text": f"Создай краткое резюме следующего диалога, сохраняя ключевые факты и контекст:\n\n{dialog_text}"
+                    "text": f"Ты должен создать краткую справку из следующей информации. ВАЖНО: Пиши ТОЛЬКО ФАКТЫ в утвердительной форме. НЕ формулируй вопросы. НЕ пиши 'нужно ответить', 'следует обсудить' и т.п. Только сухие факты о том, что было сказано:\n\n{responses_text}\n\nТвоя справка (2-3 предложения, только факты):"
                 }
             ]
         }
@@ -127,8 +149,28 @@ class DialogHistoryManager:
             result = response.json()
 
             if "result" in result and "alternatives" in result["result"]:
-                summary = result["result"]["alternatives"][0]["message"]["text"]
-                return summary.strip()
+                summary = result["result"]["alternatives"][0]["message"]["text"].strip()
+
+                # Очищаем summary от типичных вводных фраз
+                unwanted_phrases = [
+                    "Перечисли основные моменты предыдущего диалога.",
+                    "Основные моменты:",
+                    "Резюме:",
+                    "Краткое резюме:",
+                    "В диалоге обсуждались следующие темы:",
+                    "Пользователь спросил",
+                    "Обсуждались темы:",
+                    "В предыдущем диалоге:",
+                    "Факты из диалога:",
+                ]
+
+                for phrase in unwanted_phrases:
+                    if summary.lower().startswith(phrase.lower()):
+                        summary = summary[len(phrase):].strip()
+                        # Удаляем начальные двоеточия и точки после удаления фразы
+                        summary = summary.lstrip(':. ')
+
+                return summary
             else:
                 # Фоллбэк: простое текстовое резюме
                 return f"Обсуждалось {len(messages)} сообщений"
@@ -1228,14 +1270,156 @@ def compression_test():
         except Exception as e:
             return jsonify({'error': str(e)}), 500
 
+    elif action == 'run_test':
+        # Автоматический тест компрессии
+        try:
+            # Очищаем историю перед тестом
+            dialog_manager.clear()
+
+            # Серия тестовых сообщений (упрощенная версия)
+            test_messages = [
+                "Расскажи о Python",
+                "Что такое Django?",
+                "Как работает Flask?",
+                "Что такое FastAPI?",
+                "Сравни Django и Flask",
+                "Какие есть ORM для Python?",
+                "Что такое SQLAlchemy?",
+                "Как работает async/await?",
+                "Что такое asyncio?",
+                "Объясни декораторы в Python",
+                "Что такое генераторы?",
+                "Как работает yield?",
+            ]
+
+            total_tokens = 0
+            total_cost = 0
+            start_time_total = time.time()
+
+            # Отправляем сообщения
+            for message in test_messages:
+                # Добавляем сообщение пользователя
+                dialog_manager.add_message('user', message)
+
+                # Получаем историю для API
+                history = dialog_manager.get_history_for_api()
+                messages = history.copy()
+
+                # Получаем ответ от модели
+                response = call_yandex_gpt(messages, temperature=0.7)
+
+                # Добавляем ответ в историю
+                dialog_manager.add_message('assistant', response)
+
+                # Подсчет токенов
+                input_tokens = sum(estimate_tokens(msg['text']) for msg in messages)
+                output_tokens = estimate_tokens(response)
+                total_tokens += input_tokens + output_tokens
+
+                # Расчет стоимости
+                pricing = YANDEX_MODELS['yandexgpt']['pricing']
+                cost = (input_tokens * pricing['input'] + output_tokens * pricing['output']) / 1000
+                total_cost += cost
+
+            total_time = time.time() - start_time_total
+
+            # Получаем финальную статистику
+            final_stats = dialog_manager.get_stats()
+
+            # Делаем финальное сравнение
+            test_question = "Какой фреймворк лучше выбрать для веб-разработки?"
+
+            # Создаем два независимых менеджера для честного сравнения
+            manager_with = DialogHistoryManager(compression_threshold=10, use_compression=True)
+            manager_without = DialogHistoryManager(compression_threshold=10, use_compression=False)
+
+            # Копируем текущую историю
+            for msg in dialog_manager.messages:
+                manager_with.add_message(msg['role'], msg['text'])
+                manager_without.add_message(msg['role'], msg['text'])
+
+            # Добавляем тестовый вопрос
+            manager_with.add_message('user', test_question)
+            manager_without.add_message('user', test_question)
+
+            # С компрессией
+            start_time = time.time()
+            history_compressed = manager_with.get_history_for_api(use_compressed=True)
+            messages_compressed = history_compressed + [{"role": "user", "text": test_question}] if history_compressed else [{"role": "user", "text": test_question}]
+            response_compressed = call_yandex_gpt(messages_compressed, temperature=0.7)
+            time_compressed = time.time() - start_time
+
+            # Без компрессии
+            start_time = time.time()
+            history_full = manager_without.get_history_for_api(use_compressed=False)
+            messages_full = history_full + [{"role": "user", "text": test_question}] if history_full else [{"role": "user", "text": test_question}]
+            response_full = call_yandex_gpt(messages_full, temperature=0.7)
+            time_full = time.time() - start_time
+
+            # Подсчет токенов для сравнения
+            tokens_compressed_input = sum(estimate_tokens(msg['text']) for msg in messages_compressed)
+            tokens_compressed_output = estimate_tokens(response_compressed)
+            tokens_full_input = sum(estimate_tokens(msg['text']) for msg in messages_full)
+            tokens_full_output = estimate_tokens(response_full)
+
+            # Расчет стоимости
+            pricing = YANDEX_MODELS['yandexgpt']['pricing']
+            cost_compressed = (tokens_compressed_input * pricing['input'] + tokens_compressed_output * pricing['output']) / 1000
+            cost_full = (tokens_full_input * pricing['input'] + tokens_full_output * pricing['output']) / 1000
+
+            comparison_result = {
+                'with_compression': {
+                    'response': response_compressed,
+                    'metrics': {
+                        'response_time': round(time_compressed, 3),
+                        'input_tokens': tokens_compressed_input,
+                        'output_tokens': tokens_compressed_output,
+                        'total_tokens': tokens_compressed_input + tokens_compressed_output,
+                        'cost_rub': round(cost_compressed, 4),
+                        'history_messages': len(messages_compressed) - 1
+                    }
+                },
+                'without_compression': {
+                    'response': response_full,
+                    'metrics': {
+                        'response_time': round(time_full, 3),
+                        'input_tokens': tokens_full_input,
+                        'output_tokens': tokens_full_output,
+                        'total_tokens': tokens_full_input + tokens_full_output,
+                        'cost_rub': round(cost_full, 4),
+                        'history_messages': len(messages_full) - 1
+                    }
+                },
+                'savings': {
+                    'tokens_saved': tokens_full_input - tokens_compressed_input,
+                    'tokens_saved_percent': round((1 - tokens_compressed_input / tokens_full_input) * 100, 2) if tokens_full_input > 0 else 0,
+                    'cost_saved': round(cost_full - cost_compressed, 4),
+                    'cost_saved_percent': round((1 - cost_compressed / cost_full) * 100, 2) if cost_full > 0 else 0,
+                    'time_difference': round(time_full - time_compressed, 3)
+                }
+            }
+
+            return jsonify({
+                'status': 'ok',
+                'messages_sent': len(test_messages),
+                'total_time': round(total_time, 2),
+                'total_tokens': total_tokens,
+                'total_cost': round(total_cost, 4),
+                'final_stats': final_stats,
+                'comparison': comparison_result
+            })
+
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
     elif action == 'send':
         # Обычная отправка сообщения с компрессией
         if not message:
             return jsonify({'error': 'Сообщение не указано'}), 400
 
         try:
-            # Добавляем сообщение пользователя
-            dialog_manager.add_message('user', message)
+            # Добавляем сообщение пользователя и проверяем, произошла ли компрессия
+            compression_triggered = dialog_manager.add_message('user', message)
 
             # Получаем историю для API
             history = dialog_manager.get_history_for_api()
@@ -1266,6 +1450,7 @@ def compression_test():
             return jsonify({
                 'status': 'ok',
                 'response': response,
+                'compression_triggered': compression_triggered,
                 'metrics': {
                     'response_time': round(response_time, 3),
                     'input_tokens': input_tokens,
