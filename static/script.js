@@ -1261,6 +1261,10 @@ if (compressionSendBtn) {
 if (compressionCompareBtn) {
     compressionCompareBtn.addEventListener('click', () => sendCompressionMessage('compare'));
 }
+const compressionTestBtn = document.getElementById('compressionTestBtn');
+if (compressionTestBtn) {
+    compressionTestBtn.addEventListener('click', runCompressionTest);
+}
 if (compressionStatsBtn) {
     compressionStatsBtn.addEventListener('click', updateCompressionStats);
 }
@@ -1524,6 +1528,84 @@ async function clearCompressionHistory() {
         }
     } catch (error) {
         addCompressionMessage(`❌ Ошибка при очистке: ${error.message}`, false);
+    }
+}
+
+async function runCompressionTest() {
+    if (!confirm('Запустить автоматический тест? Это отправит серию сообщений для проверки механизма сжатия.')) return;
+
+    // Очищаем историю перед тестом
+    addCompressionMessage('🧪 Запуск автоматического теста...', false);
+    addCompressionMessage('📋 Очистка истории...', false);
+
+    try {
+        await fetch('/compression_test', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'clear' })
+        });
+
+        addCompressionMessage('✅ История очищена', false);
+
+        // Отключаем кнопки
+        compressionSendBtn.disabled = true;
+        compressionCompareBtn.disabled = true;
+        compressionTestBtn.disabled = true;
+        compressionStatsBtn.disabled = true;
+        compressionClearBtn.disabled = true;
+
+        // Запускаем тест
+        const response = await fetch('/compression_test', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'run_test' })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            addCompressionMessage(`❌ Ошибка теста: ${data.error || 'Неизвестная ошибка'}`, false);
+            return;
+        }
+
+        // Показываем результаты теста
+        addCompressionMessage('✅ Тест завершен!', false);
+        addCompressionMessage('', false);
+        addCompressionMessage('📊 РЕЗУЛЬТАТЫ ТЕСТА:', false);
+        addCompressionMessage(`📝 Отправлено сообщений: ${data.messages_sent}`, false);
+        addCompressionMessage(`⏱️ Общее время: ${data.total_time}s`, false);
+        addCompressionMessage(`📊 Всего использовано токенов: ${data.total_tokens}`, false);
+        addCompressionMessage(`💰 Общая стоимость: ${data.total_cost}₽`, false);
+        addCompressionMessage('', false);
+
+        if (data.final_stats) {
+            const stats = data.final_stats;
+            addCompressionMessage('📈 СТАТИСТИКА СЖАТИЯ:', false);
+            addCompressionMessage(`🗜️ Компрессий выполнено: ${stats.compression_count}`, false);
+            addCompressionMessage(`💾 Сэкономлено токенов: ${stats.total_tokens_saved}`, false);
+            addCompressionMessage(`📉 Степень сжатия: ${stats.compression_ratio}%`, false);
+
+            // Обновляем отображение статистики
+            updateCompressionStatsDisplay(stats);
+        }
+
+        if (data.comparison) {
+            addCompressionMessage('', false);
+            addCompressionMessage('⚖️ СРАВНЕНИЕ (последний запрос):', false);
+            addCompressionMessage(`✅ С компрессией: ${data.comparison.with_compression.metrics.total_tokens} токенов, ${data.comparison.with_compression.metrics.cost_rub}₽`, false);
+            addCompressionMessage(`❌ Без компрессии: ${data.comparison.without_compression.metrics.total_tokens} токенов, ${data.comparison.without_compression.metrics.cost_rub}₽`, false);
+            addCompressionMessage(`💡 Экономия: ${data.comparison.savings.tokens_saved} токенов (${data.comparison.savings.tokens_saved_percent}%)`, false);
+        }
+
+    } catch (error) {
+        addCompressionMessage(`❌ Ошибка: ${error.message}`, false);
+    } finally {
+        // Включаем кнопки
+        compressionSendBtn.disabled = false;
+        compressionCompareBtn.disabled = false;
+        compressionTestBtn.disabled = false;
+        compressionStatsBtn.disabled = false;
+        compressionClearBtn.disabled = false;
     }
 }
 

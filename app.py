@@ -1228,6 +1228,148 @@ def compression_test():
         except Exception as e:
             return jsonify({'error': str(e)}), 500
 
+    elif action == 'run_test':
+        # Автоматический тест компрессии
+        try:
+            # Очищаем историю перед тестом
+            dialog_manager.clear()
+
+            # Серия тестовых сообщений (упрощенная версия)
+            test_messages = [
+                "Расскажи о Python",
+                "Что такое Django?",
+                "Как работает Flask?",
+                "Что такое FastAPI?",
+                "Сравни Django и Flask",
+                "Какие есть ORM для Python?",
+                "Что такое SQLAlchemy?",
+                "Как работает async/await?",
+                "Что такое asyncio?",
+                "Объясни декораторы в Python",
+                "Что такое генераторы?",
+                "Как работает yield?",
+            ]
+
+            total_tokens = 0
+            total_cost = 0
+            start_time_total = time.time()
+
+            # Отправляем сообщения
+            for message in test_messages:
+                # Добавляем сообщение пользователя
+                dialog_manager.add_message('user', message)
+
+                # Получаем историю для API
+                history = dialog_manager.get_history_for_api()
+                messages = history.copy()
+
+                # Получаем ответ от модели
+                response = call_yandex_gpt(messages, temperature=0.7)
+
+                # Добавляем ответ в историю
+                dialog_manager.add_message('assistant', response)
+
+                # Подсчет токенов
+                input_tokens = sum(estimate_tokens(msg['text']) for msg in messages)
+                output_tokens = estimate_tokens(response)
+                total_tokens += input_tokens + output_tokens
+
+                # Расчет стоимости
+                pricing = YANDEX_MODELS['yandexgpt']['pricing']
+                cost = (input_tokens * pricing['input'] + output_tokens * pricing['output']) / 1000
+                total_cost += cost
+
+            total_time = time.time() - start_time_total
+
+            # Получаем финальную статистику
+            final_stats = dialog_manager.get_stats()
+
+            # Делаем финальное сравнение
+            test_question = "Какой фреймворк лучше выбрать для веб-разработки?"
+
+            # Создаем два независимых менеджера для честного сравнения
+            manager_with = DialogHistoryManager(compression_threshold=10, use_compression=True)
+            manager_without = DialogHistoryManager(compression_threshold=10, use_compression=False)
+
+            # Копируем текущую историю
+            for msg in dialog_manager.messages:
+                manager_with.add_message(msg['role'], msg['text'])
+                manager_without.add_message(msg['role'], msg['text'])
+
+            # Добавляем тестовый вопрос
+            manager_with.add_message('user', test_question)
+            manager_without.add_message('user', test_question)
+
+            # С компрессией
+            start_time = time.time()
+            history_compressed = manager_with.get_history_for_api(use_compressed=True)
+            messages_compressed = history_compressed + [{"role": "user", "text": test_question}] if history_compressed else [{"role": "user", "text": test_question}]
+            response_compressed = call_yandex_gpt(messages_compressed, temperature=0.7)
+            time_compressed = time.time() - start_time
+
+            # Без компрессии
+            start_time = time.time()
+            history_full = manager_without.get_history_for_api(use_compressed=False)
+            messages_full = history_full + [{"role": "user", "text": test_question}] if history_full else [{"role": "user", "text": test_question}]
+            response_full = call_yandex_gpt(messages_full, temperature=0.7)
+            time_full = time.time() - start_time
+
+            # Подсчет токенов для сравнения
+            tokens_compressed_input = sum(estimate_tokens(msg['text']) for msg in messages_compressed)
+            tokens_compressed_output = estimate_tokens(response_compressed)
+            tokens_full_input = sum(estimate_tokens(msg['text']) for msg in messages_full)
+            tokens_full_output = estimate_tokens(response_full)
+
+            # Расчет стоимости
+            pricing = YANDEX_MODELS['yandexgpt']['pricing']
+            cost_compressed = (tokens_compressed_input * pricing['input'] + tokens_compressed_output * pricing['output']) / 1000
+            cost_full = (tokens_full_input * pricing['input'] + tokens_full_output * pricing['output']) / 1000
+
+            comparison_result = {
+                'with_compression': {
+                    'response': response_compressed,
+                    'metrics': {
+                        'response_time': round(time_compressed, 3),
+                        'input_tokens': tokens_compressed_input,
+                        'output_tokens': tokens_compressed_output,
+                        'total_tokens': tokens_compressed_input + tokens_compressed_output,
+                        'cost_rub': round(cost_compressed, 4),
+                        'history_messages': len(messages_compressed) - 1
+                    }
+                },
+                'without_compression': {
+                    'response': response_full,
+                    'metrics': {
+                        'response_time': round(time_full, 3),
+                        'input_tokens': tokens_full_input,
+                        'output_tokens': tokens_full_output,
+                        'total_tokens': tokens_full_input + tokens_full_output,
+                        'cost_rub': round(cost_full, 4),
+                        'history_messages': len(messages_full) - 1
+                    }
+                },
+                'savings': {
+                    'tokens_saved': tokens_full_input - tokens_compressed_input,
+                    'tokens_saved_percent': round((1 - tokens_compressed_input / tokens_full_input) * 100, 2) if tokens_full_input > 0 else 0,
+                    'cost_saved': round(cost_full - cost_compressed, 4),
+                    'cost_saved_percent': round((1 - cost_compressed / cost_full) * 100, 2) if cost_full > 0 else 0,
+                    'time_difference': round(time_full - time_compressed, 3)
+                }
+            }
+
+            return jsonify({
+                'status': 'ok',
+                'messages_sent': len(test_messages),
+                'total_time': round(total_time, 2),
+                'total_tokens': total_tokens,
+                'total_cost': round(total_cost, 4),
+                'final_stats': final_stats,
+                'comparison': comparison_result
+            })
+
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
     elif action == 'send':
         # Обычная отправка сообщения с компрессией
         if not message:

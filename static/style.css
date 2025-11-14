@@ -2108,6 +2108,14 @@ body {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
 }
 
+.compression-action-btn.success {
+    background: #4caf50;
+}
+
+.compression-action-btn.success:hover {
+    background: #45a049;
+}
+
 .compression-action-btn.danger {
     background: #f44336;
 }
