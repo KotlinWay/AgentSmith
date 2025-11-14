@@ -1369,6 +1369,16 @@ async function sendCompressionMessage(action) {
 
         if (action === 'send') {
             // Обычная отправка
+
+            // Показываем индикатор компрессии, если она произошла
+            if (data.compression_triggered) {
+                const compressionNotice = document.createElement('div');
+                compressionNotice.className = 'message assistant compression-notice';
+                compressionNotice.innerHTML = '<div class="message-content">🗜️ ВЫПОЛНЕНА КОМПРЕССИЯ ИСТОРИИ! Старые сообщения сжаты в краткое резюме.</div>';
+                compressionMessages.appendChild(compressionNotice);
+                compressionMessages.scrollTop = compressionMessages.scrollHeight;
+            }
+
             addCompressionMessage(data.response, false);
 
             // Обновляем статистику

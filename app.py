@@ -46,18 +46,23 @@ class DialogHistoryManager:
         self.total_tokens_saved = 0  # Общее количество сэкономленных токенов
 
     def add_message(self, role, text):
-        """Добавить новое сообщение в историю"""
+        """
+        Добавить новое сообщение в историю.
+        Возвращает True, если была выполнена компрессия, иначе False.
+        """
         message = {"role": role, "text": text}
         self.messages.append(message)
 
         # Проверяем, нужно ли выполнить компрессию
         if self.use_compression and len(self.messages) >= self.compression_threshold:
-            self._compress_history()
+            return self._compress_history()
+        return False
 
     def _compress_history(self):
         """
         Выполняет компрессию истории диалога.
         Создает summary из старых сообщений и сохраняет только недавние.
+        Возвращает True, если компрессия была выполнена успешно.
         """
         # Разделяем историю на две части:
         # 1. Старая часть для компрессии (все кроме последних 3 сообщений)
@@ -66,7 +71,7 @@ class DialogHistoryManager:
         recent_messages = self.messages[-3:]
 
         if len(messages_to_compress) < 2:
-            return  # Недостаточно сообщений для компрессии
+            return False  # Недостаточно сообщений для компрессии
 
         # Создаем summary из старых сообщений
         summary_text = self._create_summary(messages_to_compress)
@@ -81,12 +86,13 @@ class DialogHistoryManager:
 
         # Формируем новую сжатую историю
         self.compressed_messages = [
-            {"role": "system", "text": f"[SUMMARY предыдущего диалога]: {summary_text}"}
+            {"role": "system", "text": f"[КОНТЕКСТ предыдущего диалога]: {summary_text}"}
         ]
         self.compressed_messages.extend(recent_messages)
 
         # Очищаем полную историю, оставляем только недавние сообщения
         self.messages = recent_messages.copy()
+        return True
 
     def _create_summary(self, messages):
         """
@@ -116,7 +122,7 @@ class DialogHistoryManager:
             "messages": [
                 {
                     "role": "user",
-                    "text": f"Создай краткое резюме следующего диалога, сохраняя ключевые факты и контекст:\n\n{dialog_text}"
+                    "text": f"Суммируй следующий диалог в 2-3 предложения. Укажи только ключевые факты, о чем говорилось. НЕ пиши вводные фразы типа 'Перечисли' или 'Основные моменты'. Сразу начинай с фактов:\n\n{dialog_text}"
                 }
             ]
         }
@@ -127,8 +133,22 @@ class DialogHistoryManager:
             result = response.json()
 
             if "result" in result and "alternatives" in result["result"]:
-                summary = result["result"]["alternatives"][0]["message"]["text"]
-                return summary.strip()
+                summary = result["result"]["alternatives"][0]["message"]["text"].strip()
+
+                # Очищаем summary от типичных вводных фраз
+                unwanted_phrases = [
+                    "Перечисли основные моменты предыдущего диалога.",
+                    "Основные моменты:",
+                    "Резюме:",
+                    "Краткое резюме:",
+                    "В диалоге обсуждались следующие темы:",
+                ]
+
+                for phrase in unwanted_phrases:
+                    if summary.startswith(phrase):
+                        summary = summary[len(phrase):].strip()
+
+                return summary
             else:
                 # Фоллбэк: простое текстовое резюме
                 return f"Обсуждалось {len(messages)} сообщений"
@@ -1376,8 +1396,8 @@ def compression_test():
             return jsonify({'error': 'Сообщение не указано'}), 400
 
         try:
-            # Добавляем сообщение пользователя
-            dialog_manager.add_message('user', message)
+            # Добавляем сообщение пользователя и проверяем, произошла ли компрессия
+            compression_triggered = dialog_manager.add_message('user', message)
 
             # Получаем историю для API
             history = dialog_manager.get_history_for_api()
@@ -1408,6 +1428,7 @@ def compression_test():
             return jsonify({
                 'status': 'ok',
                 'response': response,
+                'compression_triggered': compression_triggered,
                 'metrics': {
                     'response_time': round(response_time, 3),
                     'input_tokens': input_tokens,
