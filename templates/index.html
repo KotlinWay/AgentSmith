@@ -18,6 +18,7 @@
                 <button id="comparisonModeBtn" class="mode-btn">⚖️ Сравнение</button>
                 <button id="tokensModeBtn" class="mode-btn">🎫 Токены</button>
                 <button id="compressionModeBtn" class="mode-btn">🗜️ Сжатие</button>
+                <button id="memoryModeBtn" class="mode-btn">🧠💾 Память</button>
             </div>
             <button id="clearBtn" class="clear-btn">Очистить</button>
         </div>
@@ -238,6 +239,127 @@
                         <li>⚡ Ускорение обработки запросов</li>
                         <li>📏 Возможность вести долгие диалоги</li>
                     </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Интерфейс для управления памятью (День 9) -->
+        <div class="memory-container" id="memoryContainer" style="display: none;">
+            <div class="memory-intro">
+                <h2>🧠💾 Внешняя память агента</h2>
+                <p>Долговременное хранение данных, сессий и контекста между запусками!</p>
+            </div>
+
+            <!-- Статистика памяти -->
+            <div class="memory-stats-panel" id="memoryStatsPanel">
+                <h3>📊 Статистика памяти</h3>
+                <button id="refreshMemoryStats" class="memory-action-btn">🔄 Обновить</button>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-label">Сессий</div>
+                        <div class="stat-value" id="memStatSessions">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Сообщений</div>
+                        <div class="stat-value" id="memStatMessages">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Записей памяти</div>
+                        <div class="stat-value" id="memStatMemories">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Контекстов</div>
+                        <div class="stat-value" id="memStatContexts">0</div>
+                    </div>
+                    <div class="stat-card highlight">
+                        <div class="stat-label">Размер БД</div>
+                        <div class="stat-value" id="memStatDbSize">0 МБ</div>
+                    </div>
+                    <div class="stat-card highlight">
+                        <div class="stat-label">Текущая сессия</div>
+                        <div class="stat-value" id="memStatCurrentSession" style="font-size: 0.8em; word-break: break-all;">-</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Управление сессиями -->
+            <div class="memory-section">
+                <h3>📁 Управление сессиями</h3>
+                <div class="memory-actions-group">
+                    <button id="btnCreateSession" class="memory-action-btn success">➕ Создать новую сессию</button>
+                    <button id="btnListSessions" class="memory-action-btn">📋 Список сессий</button>
+                </div>
+                <div id="sessionsListContainer" class="data-list-container" style="display: none;"></div>
+            </div>
+
+            <!-- Долговременная память -->
+            <div class="memory-section">
+                <h3>💡 Долговременная память (Факты)</h3>
+                <div class="memory-form">
+                    <input type="text" id="memoryKey" placeholder="Ключ (например: user_name)" class="memory-input">
+                    <input type="text" id="memoryValue" placeholder="Значение (например: Иван)" class="memory-input">
+                    <select id="memoryCategory" class="memory-select">
+                        <option value="general">Общее</option>
+                        <option value="user_info">Информация о пользователе</option>
+                        <option value="preferences">Предпочтения</option>
+                        <option value="facts">Факты</option>
+                        <option value="context">Контекст</option>
+                    </select>
+                    <input type="number" id="memoryImportance" min="1" max="10" value="5" placeholder="Важность (1-10)" class="memory-input-small">
+                    <button id="btnSaveMemory" class="memory-action-btn success">💾 Сохранить</button>
+                </div>
+                <div class="memory-actions-group">
+                    <button id="btnListMemories" class="memory-action-btn">📋 Показать все</button>
+                    <button id="btnFilterByCategory" class="memory-action-btn">🔍 По категории</button>
+                </div>
+                <div id="memoriesListContainer" class="data-list-container" style="display: none;"></div>
+            </div>
+
+            <!-- Контекст сессии -->
+            <div class="memory-section">
+                <h3>🎯 Промежуточный контекст</h3>
+                <div class="memory-form">
+                    <input type="text" id="contextKey" placeholder="Ключ (например: current_task)" class="memory-input">
+                    <input type="text" id="contextValue" placeholder="Значение" class="memory-input">
+                    <button id="btnSaveContext" class="memory-action-btn success">💾 Сохранить контекст</button>
+                </div>
+                <div class="memory-actions-group">
+                    <button id="btnShowContext" class="memory-action-btn">📋 Показать контекст сессии</button>
+                    <button id="btnClearContext" class="memory-action-btn danger">🗑️ Очистить контекст</button>
+                </div>
+                <div id="contextContainer" class="data-list-container" style="display: none;"></div>
+            </div>
+
+            <!-- Тестирование -->
+            <div class="memory-section">
+                <h3>🧪 Тестирование памяти</h3>
+                <div class="memory-actions-group">
+                    <button id="btnFullMemoryTest" class="memory-action-btn highlight">🚀 Полный тест</button>
+                    <button id="btnPersistenceTest" class="memory-action-btn highlight">💾 Тест персистентности</button>
+                </div>
+                <div id="memoryTestResults" class="data-list-container" style="display: none;"></div>
+            </div>
+
+            <!-- Информация -->
+            <div class="memory-info">
+                <h3>ℹ️ Как использовать внешнюю память</h3>
+                <div class="info-grid">
+                    <div class="info-card">
+                        <h4>📁 Сессии</h4>
+                        <p>Создавайте разные сессии для разных диалогов. Каждая сессия хранит свою историю сообщений и контекст.</p>
+                    </div>
+                    <div class="info-card">
+                        <h4>💡 Долговременная память</h4>
+                        <p>Сохраняйте важные факты, которые должны помниться между сессиями (имя пользователя, предпочтения, важные данные).</p>
+                    </div>
+                    <div class="info-card">
+                        <h4>🎯 Промежуточный контекст</h4>
+                        <p>Храните временные данные в рамках текущей сессии (текущая задача, промежуточные результаты).</p>
+                    </div>
+                    <div class="info-card highlight">
+                        <h4>💾 Персистентность</h4>
+                        <p>Все данные сохраняются в SQLite базу данных и доступны после перезапуска приложения!</p>
+                    </div>
                 </div>
             </div>
         </div>

@@ -5,8 +5,16 @@ import os
 import re
 import time
 from typing import Dict, Any
+from memory_service import MemoryService
+import uuid
 
 app = Flask(__name__)
+
+# Инициализация сервиса внешней памяти (День 9)
+memory = MemoryService("agent_memory.db")
+
+# Текущая сессия (по умолчанию создаем новую при запуске)
+current_session_id = str(uuid.uuid4())
 
 # Загрузка конфигурации
 def load_config():
@@ -745,25 +753,33 @@ def chat():
     """Обработка сообщений чата"""
     data = request.json
     user_message = data.get('message', '').strip()
-    
+
     if not user_message:
         return jsonify({'error': 'Пустое сообщение'}), 400
-    
+
     # Сохраняем сообщение пользователя в историю
     chat_history.append({
         "role": "user",
         "text": user_message
     })
-    
+
+    # ДЕНЬ 9: Сохраняем в внешнюю память
+    user_tokens = estimate_tokens(user_message)
+    memory.save_message(current_session_id, "user", user_message, user_tokens)
+
     # Получаем ответ от агента
     assistant_response = get_agent_response(user_message)
-    
+
     # Сохраняем ответ агента в историю
     chat_history.append({
         "role": "assistant",
         "text": assistant_response
     })
-    
+
+    # ДЕНЬ 9: Сохраняем ответ в внешнюю память
+    assistant_tokens = estimate_tokens(assistant_response)
+    memory.save_message(current_session_id, "assistant", assistant_response, assistant_tokens)
+
     return jsonify({
         'response': assistant_response
     })
@@ -1550,6 +1566,352 @@ def compression_test():
         return jsonify({'error': f'Неизвестное действие: {action}'}), 400
 
 
+# ==================== ВНЕШНЯЯ ПАМЯТЬ (ДЕНЬ 9) ====================
+
+@app.route('/memory/sessions', methods=['GET', 'POST'])
+def manage_sessions():
+    """Управление сессиями диалогов"""
+    global current_session_id
+
+    if request.method == 'GET':
+        # Получить список сессий
+        sessions = memory.list_sessions(limit=50)
+        return jsonify({
+            'status': 'ok',
+            'current_session': current_session_id,
+            'sessions': sessions
+        })
+
+    elif request.method == 'POST':
+        # Создать или переключиться на сессию
+        data = request.json
+        action = data.get('action', 'create')
+
+        if action == 'create':
+            # Создать новую сессию
+            session_id = str(uuid.uuid4())
+            title = data.get('title', f'Сессия {datetime.now().strftime("%Y-%m-%d %H:%M")}')
+            metadata = data.get('metadata', {})
+
+            if memory.create_session(session_id, title, metadata):
+                current_session_id = session_id
+                return jsonify({
+                    'status': 'ok',
+                    'session_id': session_id,
+                    'message': 'Сессия создана'
+                })
+            else:
+                return jsonify({'error': 'Не удалось создать сессию'}), 500
+
+        elif action == 'switch':
+            # Переключиться на существующую сессию
+            session_id = data.get('session_id')
+            if not session_id:
+                return jsonify({'error': 'session_id не указан'}), 400
+
+            session = memory.get_session(session_id)
+            if session:
+                current_session_id = session_id
+                # Загружаем историю сообщений сессии
+                messages = memory.get_messages(session_id)
+                return jsonify({
+                    'status': 'ok',
+                    'session': session,
+                    'messages': messages,
+                    'message': 'Сессия загружена'
+                })
+            else:
+                return jsonify({'error': 'Сессия не найдена'}), 404
+
+        elif action == 'delete':
+            # Удалить сессию
+            session_id = data.get('session_id')
+            if not session_id:
+                return jsonify({'error': 'session_id не указан'}), 400
+
+            if memory.delete_session(session_id):
+                # Если удалили текущую сессию, создаем новую
+                if session_id == current_session_id:
+                    current_session_id = str(uuid.uuid4())
+                    memory.create_session(current_session_id, 'Новая сессия')
+
+                return jsonify({
+                    'status': 'ok',
+                    'message': 'Сессия удалена',
+                    'current_session': current_session_id
+                })
+            else:
+                return jsonify({'error': 'Не удалось удалить сессию'}), 500
+
+
+@app.route('/memory/messages', methods=['GET'])
+def get_session_messages():
+    """Получить историю сообщений текущей сессии"""
+    limit = request.args.get('limit', type=int, default=None)
+    messages = memory.get_messages(current_session_id, limit)
+
+    return jsonify({
+        'status': 'ok',
+        'session_id': current_session_id,
+        'count': len(messages),
+        'messages': messages
+    })
+
+
+@app.route('/memory/memories', methods=['GET', 'POST', 'DELETE'])
+def manage_memories():
+    """Управление долговременной памятью"""
+
+    if request.method == 'GET':
+        # Получить все записи памяти или по категории
+        category = request.args.get('category')
+
+        if category:
+            memories_list = memory.get_memories_by_category(category)
+        else:
+            limit = request.args.get('limit', type=int, default=50)
+            memories_list = memory.list_all_memories(limit)
+
+        return jsonify({
+            'status': 'ok',
+            'count': len(memories_list),
+            'memories': memories_list
+        })
+
+    elif request.method == 'POST':
+        # Сохранить запись в память
+        data = request.json
+        key = data.get('key')
+        value = data.get('value')
+        category = data.get('category', 'general')
+        importance = data.get('importance', 5)
+        metadata = data.get('metadata')
+
+        if not key or value is None:
+            return jsonify({'error': 'key и value обязательны'}), 400
+
+        if memory.save_memory(key, value, category, importance, metadata):
+            return jsonify({
+                'status': 'ok',
+                'message': 'Запись сохранена в память'
+            })
+        else:
+            return jsonify({'error': 'Не удалось сохранить'}), 500
+
+    elif request.method == 'DELETE':
+        # Удалить запись из памяти
+        data = request.json
+        key = data.get('key')
+
+        if not key:
+            return jsonify({'error': 'key обязателен'}), 400
+
+        if memory.delete_memory(key):
+            return jsonify({
+                'status': 'ok',
+                'message': 'Запись удалена'
+            })
+        else:
+            return jsonify({'error': 'Запись не найдена'}), 404
+
+
+@app.route('/memory/context', methods=['GET', 'POST', 'DELETE'])
+def manage_context():
+    """Управление промежуточным контекстом сессии"""
+
+    if request.method == 'GET':
+        # Получить весь контекст или конкретное значение
+        key = request.args.get('key')
+
+        if key:
+            value = memory.get_context(current_session_id, key)
+            if value is not None:
+                return jsonify({
+                    'status': 'ok',
+                    'key': key,
+                    'value': value
+                })
+            else:
+                return jsonify({'error': 'Ключ не найден'}), 404
+        else:
+            context = memory.get_all_context(current_session_id)
+            return jsonify({
+                'status': 'ok',
+                'session_id': current_session_id,
+                'context': context
+            })
+
+    elif request.method == 'POST':
+        # Сохранить значение в контекст
+        data = request.json
+        key = data.get('key')
+        value = data.get('value')
+
+        if not key or value is None:
+            return jsonify({'error': 'key и value обязательны'}), 400
+
+        if memory.save_context(current_session_id, key, value):
+            return jsonify({
+                'status': 'ok',
+                'message': 'Контекст сохранен'
+            })
+        else:
+            return jsonify({'error': 'Не удалось сохранить'}), 500
+
+    elif request.method == 'DELETE':
+        # Удалить контекст
+        data = request.json
+        key = data.get('key')  # Если None - удалится весь контекст
+
+        if memory.delete_context(current_session_id, key):
+            return jsonify({
+                'status': 'ok',
+                'message': 'Контекст удален'
+            })
+        else:
+            return jsonify({'error': 'Не удалось удалить'}), 404
+
+
+@app.route('/memory/stats', methods=['GET'])
+def memory_stats():
+    """Получить статистику использования памяти"""
+    stats = memory.get_stats()
+
+    # Добавляем информацию о текущей сессии
+    session = memory.get_session(current_session_id)
+    message_count = memory.get_message_count(current_session_id)
+
+    return jsonify({
+        'status': 'ok',
+        'stats': stats,
+        'current_session': {
+            'session_id': current_session_id,
+            'info': session,
+            'message_count': message_count
+        }
+    })
+
+
+@app.route('/memory/test', methods=['POST'])
+def memory_test():
+    """Тестирование системы памяти"""
+    data = request.json
+    action = data.get('action', 'full_test')
+
+    try:
+        if action == 'full_test':
+            # Полный тест всех функций памяти
+            test_results = []
+
+            # 1. Создание тестовой сессии
+            test_session_id = f"test_{uuid.uuid4()}"
+            result = memory.create_session(test_session_id, "Тестовая сессия", {"test": True})
+            test_results.append({
+                'test': 'Создание сессии',
+                'success': result
+            })
+
+            # 2. Сохранение сообщений
+            message_saved = memory.save_message(test_session_id, "user", "Тестовое сообщение пользователя", 10)
+            message_saved &= memory.save_message(test_session_id, "assistant", "Тестовый ответ ассистента", 20)
+            test_results.append({
+                'test': 'Сохранение сообщений',
+                'success': message_saved
+            })
+
+            # 3. Загрузка сообщений
+            messages = memory.get_messages(test_session_id)
+            test_results.append({
+                'test': 'Загрузка сообщений',
+                'success': len(messages) == 2,
+                'data': messages
+            })
+
+            # 4. Сохранение в долговременную память
+            memory_saved = memory.save_memory(
+                "test_fact",
+                {"fact": "Python - отличный язык программирования"},
+                "test",
+                8
+            )
+            test_results.append({
+                'test': 'Сохранение в долговременную память',
+                'success': memory_saved
+            })
+
+            # 5. Чтение из долговременной памяти
+            fact = memory.get_memory("test_fact")
+            test_results.append({
+                'test': 'Чтение из долговременной памяти',
+                'success': fact is not None,
+                'data': fact
+            })
+
+            # 6. Сохранение контекста
+            context_saved = memory.save_context(test_session_id, "current_task", "Тестирование памяти")
+            context_saved &= memory.save_context(test_session_id, "step", 1)
+            test_results.append({
+                'test': 'Сохранение контекста',
+                'success': context_saved
+            })
+
+            # 7. Чтение контекста
+            context = memory.get_all_context(test_session_id)
+            test_results.append({
+                'test': 'Чтение контекста',
+                'success': len(context) == 2,
+                'data': context
+            })
+
+            # 8. Очистка тестовых данных
+            memory.delete_session(test_session_id)
+            memory.delete_memory("test_fact")
+
+            # Проверяем общую статистику
+            stats = memory.get_stats()
+
+            return jsonify({
+                'status': 'ok',
+                'test_results': test_results,
+                'all_passed': all(r['success'] for r in test_results),
+                'stats': stats
+            })
+
+        elif action == 'persistence_test':
+            # Тест на сохранение данных между "запусками"
+            # Сохраняем данные
+            test_key = f"persistence_test_{int(time.time())}"
+            test_value = {
+                "timestamp": datetime.now().isoformat(),
+                "data": "Это данные должны сохраниться"
+            }
+
+            memory.save_memory(test_key, test_value, "persistence_test", 10)
+
+            # Пытаемся прочитать
+            loaded_value = memory.get_memory(test_key)
+
+            success = loaded_value is not None and loaded_value.get('data') == test_value['data']
+
+            return jsonify({
+                'status': 'ok',
+                'test': 'Тест персистентности',
+                'success': success,
+                'saved': test_value,
+                'loaded': loaded_value,
+                'message': 'Данные сохранены в БД. Перезапустите приложение и проверьте через /memory/memories'
+            })
+
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'error': str(e)
+        }), 500
+
+
 if __name__ == '__main__':
+    # Создаем начальную сессию при запуске
+    memory.create_session(current_session_id, f'Сессия {datetime.now().strftime("%Y-%m-%d %H:%M")}')
+
     app.run(debug=True, host='0.0.0.0', port=5005)
 
