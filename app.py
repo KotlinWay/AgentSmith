@@ -14,8 +14,20 @@ app = Flask(__name__)
 # Инициализация сервиса внешней памяти (День 9)
 memory = MemoryService("agent_memory.db")
 
-# Текущая сессия (по умолчанию создаем новую при запуске)
-current_session_id = str(uuid.uuid4())
+# Текущая сессия - попытка загрузить последнюю или создать новую
+def get_or_create_session():
+    """Получает последнюю сессию из БД или создает новую"""
+    sessions = memory.list_sessions(limit=1)
+    if sessions:
+        # Используем последнюю сессию
+        return sessions[0]['session_id']
+    else:
+        # Создаем новую сессию
+        session_id = str(uuid.uuid4())
+        memory.create_session(session_id, f'Сессия {datetime.now().strftime("%Y-%m-%d %H:%M")}')
+        return session_id
+
+current_session_id = get_or_create_session()
 
 # Загрузка конфигурации
 def load_config():
@@ -801,6 +813,10 @@ def recommend():
         "text": user_message
     })
 
+    # ДЕНЬ 9: Сохраняем в внешнюю память
+    user_tokens = estimate_tokens(user_message)
+    memory.save_message(current_session_id, "user", f"[Рекомендация] {user_message}", user_tokens)
+
     # Получаем ответ от агента-рекомендатора
     assistant_response = get_recommendation_agent_response(user_message)
 
@@ -809,6 +825,10 @@ def recommend():
         "role": "assistant",
         "text": assistant_response
     })
+
+    # ДЕНЬ 9: Сохраняем ответ в внешнюю память
+    assistant_tokens = estimate_tokens(assistant_response)
+    memory.save_message(current_session_id, "assistant", f"[Рекомендация] {assistant_response[:100]}...", assistant_tokens)
 
     # Проверяем, является ли ответ JSON (финальная рекомендация)
     try:
@@ -850,6 +870,10 @@ def reasoning():
     if not task:
         return jsonify({'error': 'Задача не указана'}), 400
 
+    # ДЕНЬ 9: Сохраняем вопрос в память
+    user_tokens = estimate_tokens(task)
+    memory.save_message(current_session_id, "user", f"[Рассуждение] {task}", user_tokens)
+
     results = {}
 
     try:
@@ -864,6 +888,11 @@ def reasoning():
 
         if method == 'all' or method == 'expert_panel':
             results['expert_panel'] = solve_with_expert_panel(task)
+
+        # ДЕНЬ 9: Сохраняем результаты в память
+        results_summary = f"Метод: {method}, Результаты получены"
+        assistant_tokens = estimate_tokens(str(results))
+        memory.save_message(current_session_id, "assistant", f"[Рассуждение] {results_summary}", assistant_tokens)
 
         return jsonify({
             'task': task,
@@ -1910,9 +1939,59 @@ def memory_test():
         }), 500
 
 
+def restore_session_history():
+    """
+    Восстанавливает историю диалога из базы данных при запуске.
+    Загружает последние сообщения текущей сессии обратно в память приложения.
+    """
+    global chat_history, recommendation_history
+
+    try:
+        # Получаем последние 50 сообщений из текущей сессии
+        messages = memory.get_messages(current_session_id, limit=50)
+
+        if messages:
+            print(f"📚 Восстановлено {len(messages)} сообщений из БД")
+
+            # Восстанавливаем в chat_history
+            for msg in messages:
+                # Определяем тип сообщения по префиксу
+                content = msg['content']
+
+                if content.startswith('[Рассуждение]'):
+                    # Это сообщение из режима рассуждения - не восстанавливаем в UI
+                    continue
+                elif content.startswith('[Рекомендация]'):
+                    # Это сообщение из режима рекомендаций
+                    recommendation_history.append({
+                        "role": msg['role'],
+                        "text": content.replace('[Рекомендация] ', '')
+                    })
+                else:
+                    # Обычное сообщение чата
+                    chat_history.append({
+                        "role": msg['role'],
+                        "text": content
+                    })
+        else:
+            print("📭 Нет сохраненных сообщений в текущей сессии")
+
+    except Exception as e:
+        print(f"⚠️ Ошибка восстановления истории: {e}")
+
+
 if __name__ == '__main__':
-    # Создаем начальную сессию при запуске
-    memory.create_session(current_session_id, f'Сессия {datetime.now().strftime("%Y-%m-%d %H:%M")}')
+    # Выводим информацию о текущей сессии
+    session = memory.get_session(current_session_id)
+    if session:
+        print(f"🔄 Продолжаем сессию: {session['title']}")
+        print(f"   ID: {current_session_id[:8]}...")
+        print(f"   Создана: {session['created_at']}")
+
+        # Восстанавливаем историю диалога из БД
+        restore_session_history()
+    else:
+        print(f"✨ Новая сессия: {current_session_id[:8]}...")
 
     app.run(debug=True, host='0.0.0.0', port=5005)
 
