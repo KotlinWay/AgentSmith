@@ -847,9 +847,22 @@ def recommend():
 @app.route('/clear', methods=['POST'])
 def clear_history():
     """Очистка истории чата"""
-    global chat_history
+    global chat_history, current_session_id
+
+    # Очищаем временную историю
     chat_history = []
-    return jsonify({'status': 'ok'})
+
+    # ДЕНЬ 9: Создаем новую сессию, чтобы старые сообщения не загружались
+    old_session_id = current_session_id
+    current_session_id = str(uuid.uuid4())
+    memory.create_session(current_session_id, f'Сессия {datetime.now().strftime("%Y-%m-%d %H:%M")}')
+
+    print(f"🗑️ Очищена история чата. Создана новая сессия: {current_session_id[:8]}...")
+
+    return jsonify({
+        'status': 'ok',
+        'new_session_id': current_session_id
+    })
 
 
 @app.route('/get_chat_history', methods=['GET'])
@@ -873,9 +886,22 @@ def get_recommendation_history():
 @app.route('/clear_recommendations', methods=['POST'])
 def clear_recommendations():
     """Очистка истории рекомендаций"""
-    global recommendation_history
+    global recommendation_history, current_session_id
+
+    # Очищаем временную историю
     recommendation_history = []
-    return jsonify({'status': 'ok'})
+
+    # ДЕНЬ 9: Создаем новую сессию, чтобы старые сообщения не загружались
+    old_session_id = current_session_id
+    current_session_id = str(uuid.uuid4())
+    memory.create_session(current_session_id, f'Сессия {datetime.now().strftime("%Y-%m-%d %H:%M")}')
+
+    print(f"🗑️ Очищена история рекомендаций. Создана новая сессия: {current_session_id[:8]}...")
+
+    return jsonify({
+        'status': 'ok',
+        'new_session_id': current_session_id
+    })
 
 
 @app.route('/get_reasoning_history', methods=['GET'])
@@ -890,9 +916,22 @@ def get_reasoning_history():
 @app.route('/clear_reasoning', methods=['POST'])
 def clear_reasoning():
     """Очистка истории рассуждений"""
-    global reasoning_history
+    global reasoning_history, current_session_id
+
+    # Очищаем временную историю
     reasoning_history = []
-    return jsonify({'status': 'ok'})
+
+    # ДЕНЬ 9: Создаем новую сессию, чтобы старые сообщения не загружались
+    old_session_id = current_session_id
+    current_session_id = str(uuid.uuid4())
+    memory.create_session(current_session_id, f'Сессия {datetime.now().strftime("%Y-%m-%d %H:%M")}')
+
+    print(f"🗑️ Очищена история рассуждений. Создана новая сессия: {current_session_id[:8]}...")
+
+    return jsonify({
+        'status': 'ok',
+        'new_session_id': current_session_id
+    })
 
 
 @app.route('/reasoning', methods=['POST'])
