@@ -1166,6 +1166,10 @@ function switchMode(mode) {
     if (memoryModeBtn) {
         memoryModeBtn.classList.remove('active');
     }
+    const mcpModeBtn = document.getElementById('mcpModeBtn');
+    if (mcpModeBtn) {
+        mcpModeBtn.classList.remove('active');
+    }
 
     if (mode === 'info') {
         infoModeBtn.classList.add('active');
@@ -1183,6 +1187,8 @@ function switchMode(mode) {
         compressionModeBtn.classList.add('active');
     } else if (mode === 'memory' && memoryModeBtn) {
         memoryModeBtn.classList.add('active');
+    } else if (mode === 'mcp' && mcpModeBtn) {
+        mcpModeBtn.classList.add('active');
     }
 
     // Показываем/скрываем интерфейсы
@@ -1296,6 +1302,31 @@ function switchMode(mode) {
         memoryContainer.style.display = 'block';
         // Обновляем статистику при открытии
         loadMemoryStats();
+    } else if (mode === 'mcp') {
+        chatMessages.style.display = 'none';
+        chatInputContainer.style.display = 'none';
+        if (reasoningContainer) {
+            reasoningContainer.style.display = 'none';
+        }
+        if (temperatureContainer) {
+            temperatureContainer.style.display = 'none';
+        }
+        if (comparisonContainer) {
+            comparisonContainer.style.display = 'none';
+        }
+        if (tokensContainer) {
+            tokensContainer.style.display = 'none';
+        }
+        if (compressionDialogContainer) {
+            compressionDialogContainer.style.display = 'none';
+        }
+        if (memoryContainer) {
+            memoryContainer.style.display = 'none';
+        }
+        const mcpContainer = document.getElementById('mcpContainer');
+        if (mcpContainer) {
+            mcpContainer.style.display = 'block';
+        }
     } else {
         chatMessages.style.display = 'flex';
         if (chatInputContainer) {
@@ -1318,6 +1349,10 @@ function switchMode(mode) {
         }
         if (memoryContainer) {
             memoryContainer.style.display = 'none';
+        }
+        const mcpContainerHide = document.getElementById('mcpContainer');
+        if (mcpContainerHide) {
+            mcpContainerHide.style.display = 'none';
         }
 
         // ДЕНЬ 9: Загружаем историю вместо очистки
@@ -1778,6 +1813,12 @@ const memoryContainer = document.getElementById('memoryContainer');
 
 if (memoryModeBtn) {
     memoryModeBtn.addEventListener('click', () => switchMode('memory'));
+}
+
+// MCP Mode Button (День 10)
+const mcpModeBtnListener = document.getElementById('mcpModeBtn');
+if (mcpModeBtnListener) {
+    mcpModeBtnListener.addEventListener('click', () => switchMode('mcp'));
 }
 
 // Функция загрузки статистики памяти

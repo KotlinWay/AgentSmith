@@ -6,6 +6,7 @@ import re
 import time
 from typing import Dict, Any
 from memory_service import MemoryService
+from mcp_service import mcp_service
 import uuid
 from datetime import datetime
 
@@ -2107,6 +2108,67 @@ def restore_session_history():
 
     except Exception as e:
         print(f"⚠️ Ошибка восстановления истории: {e}")
+
+
+# ==================== MCP ИНСТРУМЕНТЫ (ДЕНЬ 10) ====================
+
+@app.route('/mcp/tools', methods=['GET'])
+def get_mcp_tools():
+    """Получить список доступных MCP инструментов"""
+    try:
+        tools = mcp_service.get_tools()
+        return jsonify({
+            'status': 'ok',
+            'count': len(tools),
+            'tools': tools
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'error': str(e)
+        }), 500
+
+
+@app.route('/mcp/call_tool', methods=['POST'])
+def call_mcp_tool():
+    """Вызвать MCP инструмент"""
+    data = request.json
+    tool_name = data.get('tool_name')
+    arguments = data.get('arguments', {})
+
+    if not tool_name:
+        return jsonify({
+            'status': 'error',
+            'error': 'tool_name обязателен'
+        }), 400
+
+    try:
+        result = mcp_service.call_tool(tool_name, arguments)
+
+        # Сохраняем в память (опционально)
+        if result.get('success'):
+            memory.save_message(
+                current_session_id,
+                "user",
+                f"[MCP] Вызов {tool_name}: {json.dumps(arguments, ensure_ascii=False)}",
+                estimate_tokens(str(arguments))
+            )
+
+            result_text = '\n'.join([c['text'] for c in result.get('content', [])])
+            memory.save_message(
+                current_session_id,
+                "assistant",
+                f"[MCP] Результат {tool_name}: {result_text}",
+                estimate_tokens(result_text)
+            )
+
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'error': str(e),
+            'success': False
+        }), 500
 
 
 if __name__ == '__main__':
