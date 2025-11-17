@@ -375,24 +375,6 @@
                 </div>
             </div>
 
-            <!-- Модальное окно вызова инструмента -->
-            <div class="mcp-modal" id="mcpModal" style="display: none;">
-                <div class="mcp-modal-content">
-                    <div class="mcp-modal-header">
-                        <h3 id="mcpModalTitle">🔧 Вызов инструмента</h3>
-                        <button class="mcp-modal-close" id="mcpModalClose">✕</button>
-                    </div>
-                    <div class="mcp-modal-body">
-                        <div class="mcp-tool-info" id="mcpToolInfo"></div>
-                        <div class="mcp-tool-form" id="mcpToolForm"></div>
-                    </div>
-                    <div class="mcp-modal-footer">
-                        <button id="mcpCallTool" class="mcp-btn primary">🚀 Выполнить</button>
-                        <button id="mcpCancelTool" class="mcp-btn secondary">Отмена</button>
-                    </div>
-                </div>
-            </div>
-
             <!-- Результаты вызовов -->
             <div class="mcp-results" id="mcpResults" style="display: none;">
                 <h3>📊 Результаты выполнения</h3>
@@ -404,9 +386,27 @@
             <input type="text" id="messageInput" placeholder="Введите ваше сообщение..." autocomplete="off">
             <button id="sendBtn">Отправить</button>
         </div>
+
+        <!-- Модальное окно MCP (вынесено из mcp-container для корректной работы) -->
+        <div class="mcp-modal" id="mcpModal" style="display: none;">
+            <div class="mcp-modal-content">
+                <div class="mcp-modal-header">
+                    <h3 id="mcpModalTitle">🔧 Вызов инструмента</h3>
+                    <button class="mcp-modal-close" id="mcpModalClose">✕</button>
+                </div>
+                <div class="mcp-modal-body">
+                    <div class="mcp-tool-info" id="mcpToolInfo"></div>
+                    <div class="mcp-tool-form" id="mcpToolForm"></div>
+                </div>
+                <div class="mcp-modal-footer">
+                    <button id="mcpCallTool" class="mcp-btn primary">🚀 Выполнить</button>
+                    <button id="mcpCancelTool" class="mcp-btn secondary">Отмена</button>
+                </div>
+            </div>
+        </div>
     </div>
     <script src="{{ url_for('static', filename='script.js') }}?v=12"></script>
-    <script src="{{ url_for('static', filename='mcp.js') }}?v=1"></script>
+    <script src="{{ url_for('static', filename='mcp.js') }}?v=2"></script>
 </body>
 </html>
 
