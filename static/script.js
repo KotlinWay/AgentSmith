@@ -357,6 +357,14 @@ async function solveTask(method) {
 
         if (response.ok) {
             displayReasoningResults(data);
+
+            // Очищаем поле ввода после успешного решения
+            taskInput.value = '';
+
+            // Через 3 секунды показываем полную историю с новым результатом
+            setTimeout(() => {
+                loadReasoningHistory();
+            }, 3000);
         } else {
             reasoningResults.innerHTML = `<div class="error">Ошибка: ${data.error || 'Неизвестная ошибка'}</div>`;
         }
@@ -394,6 +402,110 @@ function displayReasoningResults(data) {
     html += '</div>';
 
     reasoningResults.innerHTML = html;
+}
+
+async function loadReasoningHistory() {
+    try {
+        const response = await fetch('/get_reasoning_history');
+        const data = await response.json();
+
+        if (data.status === 'ok' && data.history && data.history.length > 0) {
+            let html = '<div class="reasoning-history">';
+            html += '<div class="history-header">';
+            html += '<h3>📚 История рассуждений</h3>';
+            html += '<button onclick="clearReasoningHistory()" class="clear-btn">🗑️ Очистить историю</button>';
+            html += '</div>';
+
+            const methodNames = {
+                'all': 'Все методы',
+                'direct': '1️⃣ Прямой ответ',
+                'step_by_step': '2️⃣ Пошаговое решение',
+                'prompt_generator': '3️⃣ С промптом от ИИ',
+                'expert_panel': '4️⃣ Группа экспертов'
+            };
+
+            // Группируем сообщения по парам (вопрос + ответ)
+            for (let i = 0; i < data.history.length; i++) {
+                const msg = data.history[i];
+
+                if (msg.role === 'user') {
+                    html += '<div class="history-item">';
+                    html += '<div class="history-question">';
+                    html += `<strong>🧠 Задача:</strong> ${escapeHtml(msg.text)}`;
+                    html += `<br><small>Метод: ${methodNames[msg.method] || msg.method}</small>`;
+                    html += '</div>';
+
+                    // Проверяем, есть ли следующее сообщение от assistant
+                    if (i + 1 < data.history.length && data.history[i + 1].role === 'assistant') {
+                        i++; // Пропускаем следующее сообщение
+                        const answer = data.history[i];
+
+                        if (answer.restored) {
+                            // Восстановленные данные - показываем краткое описание
+                            html += '<div class="history-answer">';
+                            html += `<strong>✅ Результат:</strong> ${escapeHtml(answer.text)}`;
+                            html += '<br><small style="color: #888;">Результаты получены (восстановлено из БД)</small>';
+                            html += '</div>';
+                        } else {
+                            // Полные результаты доступны
+                            try {
+                                const results = JSON.parse(answer.text);
+                                html += '<div class="history-answer">';
+                                html += '<strong>✅ Результаты:</strong>';
+                                html += '<div class="results-summary">';
+
+                                for (const [method, result] of Object.entries(results)) {
+                                    html += `<div class="result-summary-item">`;
+                                    html += `<strong>${methodNames[method] || method}:</strong>`;
+                                    html += `<pre>${escapeHtml(result.substring(0, 200))}${result.length > 200 ? '...' : ''}</pre>`;
+                                    html += '</div>';
+                                }
+
+                                html += '</div>';
+                                html += '</div>';
+                            } catch (e) {
+                                // Если не удалось распарсить JSON
+                                html += '<div class="history-answer">';
+                                html += `<strong>✅ Результат:</strong> ${escapeHtml(answer.text)}`;
+                                html += '</div>';
+                            }
+                        }
+                    }
+
+                    html += '</div>'; // .history-item
+                }
+            }
+
+            html += '</div>';
+            reasoningResults.innerHTML = html;
+        } else {
+            reasoningResults.innerHTML = '<div class="empty-history">📭 История рассуждений пуста. Задайте первую задачу!</div>';
+        }
+    } catch (error) {
+        console.error('Ошибка загрузки истории рассуждений:', error);
+        reasoningResults.innerHTML = '<div class="empty-history">📭 История рассуждений пуста</div>';
+    }
+}
+
+async function clearReasoningHistory() {
+    if (confirm('Вы уверены, что хотите очистить всю историю рассуждений?')) {
+        try {
+            const response = await fetch('/clear_reasoning', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            const data = await response.json();
+            if (data.status === 'ok') {
+                reasoningResults.innerHTML = '<div class="empty-history">📭 История рассуждений пуста. Задайте первую задачу!</div>';
+            }
+        } catch (error) {
+            console.error('Ошибка очистки истории:', error);
+            alert('Ошибка при очистке истории');
+        }
+    }
 }
 
 async function runTemperatureExperiment() {
@@ -1051,6 +1163,9 @@ function switchMode(mode) {
     if (compressionModeBtn) {
         compressionModeBtn.classList.remove('active');
     }
+    if (memoryModeBtn) {
+        memoryModeBtn.classList.remove('active');
+    }
 
     if (mode === 'info') {
         infoModeBtn.classList.add('active');
@@ -1066,6 +1181,8 @@ function switchMode(mode) {
         tokensModeBtn.classList.add('active');
     } else if (mode === 'compression' && compressionModeBtn) {
         compressionModeBtn.classList.add('active');
+    } else if (mode === 'memory' && memoryModeBtn) {
+        memoryModeBtn.classList.add('active');
     }
 
     // Показываем/скрываем интерфейсы
@@ -1080,7 +1197,8 @@ function switchMode(mode) {
             comparisonContainer.style.display = 'none';
         }
         if (reasoningResults) {
-            reasoningResults.innerHTML = '';
+            // Загружаем историю рассуждений вместо очистки
+            loadReasoningHistory();
         }
         if (taskInput) {
             taskInput.value = '';
@@ -1152,8 +1270,32 @@ function switchMode(mode) {
             tokensContainer.style.display = 'none';
         }
         compressionDialogContainer.style.display = 'block';
+        if (memoryContainer) {
+            memoryContainer.style.display = 'none';
+        }
         // Обновляем статистику при открытии
         updateCompressionStats();
+    } else if (mode === 'memory' && memoryContainer && chatInputContainer) {
+        chatMessages.style.display = 'none';
+        chatInputContainer.style.display = 'none';
+        if (reasoningContainer) {
+            reasoningContainer.style.display = 'none';
+        }
+        if (temperatureContainer) {
+            temperatureContainer.style.display = 'none';
+        }
+        if (comparisonContainer) {
+            comparisonContainer.style.display = 'none';
+        }
+        if (tokensContainer) {
+            tokensContainer.style.display = 'none';
+        }
+        if (compressionDialogContainer) {
+            compressionDialogContainer.style.display = 'none';
+        }
+        memoryContainer.style.display = 'block';
+        // Обновляем статистику при открытии
+        loadMemoryStats();
     } else {
         chatMessages.style.display = 'flex';
         if (chatInputContainer) {
@@ -1174,24 +1316,35 @@ function switchMode(mode) {
         if (compressionDialogContainer) {
             compressionDialogContainer.style.display = 'none';
         }
+        if (memoryContainer) {
+            memoryContainer.style.display = 'none';
+        }
 
-        // Очищаем чат и показываем приветственное сообщение
+        // ДЕНЬ 9: Загружаем историю вместо очистки
         if (mode === 'info') {
-            chatMessages.innerHTML = `
-                <div class="message assistant">
-                    <div class="message-content">Привет! Я агент Смит, твой справочник по фильмам. Введи название фильма.</div>
-                </div>
-            `;
-            // Очищаем историю на сервере
-            fetch('/clear', { method: 'POST' }).catch(console.error);
+            // Загружаем историю чата
+            loadChatHistory().then(hasHistory => {
+                // Если истории нет, показываем приветственное сообщение
+                if (!hasHistory) {
+                    chatMessages.innerHTML = `
+                        <div class="message assistant">
+                            <div class="message-content">Привет! Я агент Смит, твой справочник по фильмам. Введи название фильма.</div>
+                        </div>
+                    `;
+                }
+            });
         } else if (mode === 'recommend') {
-            chatMessages.innerHTML = `
-                <div class="message assistant">
-                    <div class="message-content">Привет! Я помогу тебе подобрать идеальный фильм. Расскажи, что тебе нравится, в какой компании будешь смотреть и какое у тебя настроение? 🎬</div>
-                </div>
-            `;
-            // Очищаем историю рекомендаций на сервере
-            fetch('/clear_recommendations', { method: 'POST' }).catch(console.error);
+            // Загружаем историю рекомендаций
+            loadRecommendationHistory().then(hasHistory => {
+                // Если истории нет, показываем приветственное сообщение
+                if (!hasHistory) {
+                    chatMessages.innerHTML = `
+                        <div class="message assistant">
+                            <div class="message-content">Привет! Я помогу тебе подобрать идеальный фильм. Расскажи, что тебе нравится, в какой компании будешь смотреть и какое у тебя настроение? 🎬</div>
+                        </div>
+                    `;
+                }
+            });
         }
     }
 }
@@ -1616,4 +1769,523 @@ async function runCompressionTest() {
         compressionClearBtn.disabled = false;
     }
 }
+
+// ==================== ВНЕШНЯЯ ПАМЯТЬ (ДЕНЬ 9) ====================
+
+// Переключение на режим памяти
+const memoryModeBtn = document.getElementById('memoryModeBtn');
+const memoryContainer = document.getElementById('memoryContainer');
+
+if (memoryModeBtn) {
+    memoryModeBtn.addEventListener('click', () => switchMode('memory'));
+}
+
+// Функция загрузки статистики памяти
+async function loadMemoryStats() {
+    try {
+        const response = await fetch('/memory/stats');
+        const data = await response.json();
+
+        if (data.status === 'ok') {
+            // Обновляем статистику
+            document.getElementById('memStatSessions').textContent = data.stats.sessions;
+            document.getElementById('memStatMessages').textContent = data.stats.messages;
+            document.getElementById('memStatMemories').textContent = data.stats.memories;
+            document.getElementById('memStatContexts').textContent = data.stats.context_entries;
+            document.getElementById('memStatDbSize').textContent = data.stats.db_size_mb + ' МБ';
+
+            // Текущая сессия
+            if (data.current_session && data.current_session.info) {
+                const sessionId = data.current_session.session_id.substring(0, 8) + '...';
+                document.getElementById('memStatCurrentSession').textContent = sessionId;
+            }
+        }
+    } catch (error) {
+        console.error('Ошибка загрузки статистики памяти:', error);
+    }
+}
+
+// Обновление статистики
+document.getElementById('refreshMemoryStats').addEventListener('click', loadMemoryStats);
+
+// Создание новой сессии
+document.getElementById('btnCreateSession').addEventListener('click', async () => {
+    const title = prompt('Название новой сессии:', `Сессия ${new Date().toLocaleString()}`);
+    if (!title) return;
+
+    try {
+        const response = await fetch('/memory/sessions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                action: 'create',
+                title: title
+            })
+        });
+
+        const data = await response.json();
+
+        if (data.status === 'ok') {
+            alert('✅ Сессия создана: ' + data.session_id);
+            loadMemoryStats();
+        } else {
+            alert('❌ Ошибка: ' + (data.error || 'Неизвестная ошибка'));
+        }
+    } catch (error) {
+        alert('❌ Ошибка: ' + error.message);
+    }
+});
+
+// Список сессий
+document.getElementById('btnListSessions').addEventListener('click', async () => {
+    try {
+        const response = await fetch('/memory/sessions');
+        const data = await response.json();
+
+        if (data.status === 'ok') {
+            const container = document.getElementById('sessionsListContainer');
+            container.innerHTML = '';
+
+            if (data.sessions.length === 0) {
+                container.innerHTML = '<p>Нет сохраненных сессий</p>';
+            } else {
+                const table = document.createElement('div');
+                table.className = 'memory-table';
+                table.innerHTML = `
+                    <div class="memory-table-header">
+                        <div>Название</div>
+                        <div>ID</div>
+                        <div>Создана</div>
+                        <div>Действия</div>
+                    </div>
+                `;
+
+                data.sessions.forEach(session => {
+                    const row = document.createElement('div');
+                    row.className = 'memory-table-row';
+                    const isActive = session.session_id === data.current_session;
+                    row.innerHTML = `
+                        <div>${session.title} ${isActive ? '✅' : ''}</div>
+                        <div style="font-size: 0.8em;">${session.session_id.substring(0, 12)}...</div>
+                        <div>${new Date(session.created_at).toLocaleString()}</div>
+                        <div>
+                            <button class="btn-switch-session" data-id="${session.session_id}">🔄 Переключить</button>
+                            <button class="btn-delete-session" data-id="${session.session_id}">🗑️</button>
+                        </div>
+                    `;
+                    table.appendChild(row);
+                });
+
+                container.appendChild(table);
+
+                // Обработчики кнопок
+                container.querySelectorAll('.btn-switch-session').forEach(btn => {
+                    btn.addEventListener('click', async (e) => {
+                        const sessionId = e.target.dataset.id;
+                        await switchSession(sessionId);
+                    });
+                });
+
+                container.querySelectorAll('.btn-delete-session').forEach(btn => {
+                    btn.addEventListener('click', async (e) => {
+                        const sessionId = e.target.dataset.id;
+                        if (confirm('Удалить сессию?')) {
+                            await deleteSession(sessionId);
+                        }
+                    });
+                });
+            }
+
+            container.style.display = 'block';
+        }
+    } catch (error) {
+        alert('❌ Ошибка: ' + error.message);
+    }
+});
+
+// Переключение сессии
+async function switchSession(sessionId) {
+    try {
+        const response = await fetch('/memory/sessions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                action: 'switch',
+                session_id: sessionId
+            })
+        });
+
+        const data = await response.json();
+
+        if (data.status === 'ok') {
+            alert('✅ Сессия переключена');
+            loadMemoryStats();
+            document.getElementById('btnListSessions').click();
+        } else {
+            alert('❌ Ошибка: ' + (data.error || 'Неизвестная ошибка'));
+        }
+    } catch (error) {
+        alert('❌ Ошибка: ' + error.message);
+    }
+}
+
+// Удаление сессии
+async function deleteSession(sessionId) {
+    try {
+        const response = await fetch('/memory/sessions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                action: 'delete',
+                session_id: sessionId
+            })
+        });
+
+        const data = await response.json();
+
+        if (data.status === 'ok') {
+            alert('✅ Сессия удалена');
+            loadMemoryStats();
+            document.getElementById('btnListSessions').click();
+        } else {
+            alert('❌ Ошибка: ' + (data.error || 'Неизвестная ошибка'));
+        }
+    } catch (error) {
+        alert('❌ Ошибка: ' + error.message);
+    }
+}
+
+// Сохранение в долговременную память
+document.getElementById('btnSaveMemory').addEventListener('click', async () => {
+    const key = document.getElementById('memoryKey').value.trim();
+    const value = document.getElementById('memoryValue').value.trim();
+    const category = document.getElementById('memoryCategory').value;
+    const importance = parseInt(document.getElementById('memoryImportance').value);
+
+    if (!key || !value) {
+        alert('Заполните ключ и значение');
+        return;
+    }
+
+    try {
+        const response = await fetch('/memory/memories', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                key: key,
+                value: value,
+                category: category,
+                importance: importance
+            })
+        });
+
+        const data = await response.json();
+
+        if (data.status === 'ok') {
+            alert('✅ Запись сохранена в память');
+            document.getElementById('memoryKey').value = '';
+            document.getElementById('memoryValue').value = '';
+            loadMemoryStats();
+        } else {
+            alert('❌ Ошибка: ' + (data.error || 'Неизвестная ошибка'));
+        }
+    } catch (error) {
+        alert('❌ Ошибка: ' + error.message);
+    }
+});
+
+// Показать все записи памяти
+document.getElementById('btnListMemories').addEventListener('click', async () => {
+    try {
+        const response = await fetch('/memory/memories');
+        const data = await response.json();
+
+        if (data.status === 'ok') {
+            displayMemories(data.memories);
+        }
+    } catch (error) {
+        alert('❌ Ошибка: ' + error.message);
+    }
+});
+
+// Фильтр по категории
+document.getElementById('btnFilterByCategory').addEventListener('click', async () => {
+    const category = document.getElementById('memoryCategory').value;
+
+    try {
+        const response = await fetch(`/memory/memories?category=${category}`);
+        const data = await response.json();
+
+        if (data.status === 'ok') {
+            displayMemories(data.memories);
+        }
+    } catch (error) {
+        alert('❌ Ошибка: ' + error.message);
+    }
+});
+
+// Отображение записей памяти
+function displayMemories(memories) {
+    const container = document.getElementById('memoriesListContainer');
+    container.innerHTML = '';
+
+    if (memories.length === 0) {
+        container.innerHTML = '<p>Нет записей в памяти</p>';
+    } else {
+        const table = document.createElement('div');
+        table.className = 'memory-table';
+        table.innerHTML = `
+            <div class="memory-table-header">
+                <div>Ключ</div>
+                <div>Значение</div>
+                <div>Категория</div>
+                <div>Важность</div>
+                <div>Обращений</div>
+                <div>Действия</div>
+            </div>
+        `;
+
+        memories.forEach(mem => {
+            const row = document.createElement('div');
+            row.className = 'memory-table-row';
+            const displayValue = typeof mem.value === 'object' ? JSON.stringify(mem.value) : mem.value;
+            row.innerHTML = `
+                <div><strong>${mem.key}</strong></div>
+                <div>${displayValue.substring(0, 50)}${displayValue.length > 50 ? '...' : ''}</div>
+                <div>${mem.category}</div>
+                <div>${mem.importance}/10</div>
+                <div>${mem.access_count}</div>
+                <div>
+                    <button class="btn-delete-memory" data-key="${mem.key}">🗑️ Удалить</button>
+                </div>
+            `;
+            table.appendChild(row);
+        });
+
+        container.appendChild(table);
+
+        // Обработчики удаления
+        container.querySelectorAll('.btn-delete-memory').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                const key = e.target.dataset.key;
+                if (confirm(`Удалить запись "${key}"?`)) {
+                    await deleteMemory(key);
+                }
+            });
+        });
+    }
+
+    container.style.display = 'block';
+}
+
+// Удаление записи из памяти
+async function deleteMemory(key) {
+    try {
+        const response = await fetch('/memory/memories', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ key: key })
+        });
+
+        const data = await response.json();
+
+        if (data.status === 'ok') {
+            alert('✅ Запись удалена');
+            loadMemoryStats();
+            document.getElementById('btnListMemories').click();
+        } else {
+            alert('❌ Ошибка: ' + (data.error || 'Неизвестная ошибка'));
+        }
+    } catch (error) {
+        alert('❌ Ошибка: ' + error.message);
+    }
+}
+
+// Сохранение контекста
+document.getElementById('btnSaveContext').addEventListener('click', async () => {
+    const key = document.getElementById('contextKey').value.trim();
+    const value = document.getElementById('contextValue').value.trim();
+
+    if (!key || !value) {
+        alert('Заполните ключ и значение');
+        return;
+    }
+
+    try {
+        const response = await fetch('/memory/context', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                key: key,
+                value: value
+            })
+        });
+
+        const data = await response.json();
+
+        if (data.status === 'ok') {
+            alert('✅ Контекст сохранен');
+            document.getElementById('contextKey').value = '';
+            document.getElementById('contextValue').value = '';
+            loadMemoryStats();
+        } else {
+            alert('❌ Ошибка: ' + (data.error || 'Неизвестная ошибка'));
+        }
+    } catch (error) {
+        alert('❌ Ошибка: ' + error.message);
+    }
+});
+
+// Показать контекст сессии
+document.getElementById('btnShowContext').addEventListener('click', async () => {
+    try {
+        const response = await fetch('/memory/context');
+        const data = await response.json();
+
+        if (data.status === 'ok') {
+            const container = document.getElementById('contextContainer');
+            container.innerHTML = '';
+
+            const context = data.context;
+            const keys = Object.keys(context);
+
+            if (keys.length === 0) {
+                container.innerHTML = '<p>Контекст пуст</p>';
+            } else {
+                const table = document.createElement('div');
+                table.className = 'memory-table';
+                table.innerHTML = `
+                    <div class="memory-table-header">
+                        <div>Ключ</div>
+                        <div>Значение</div>
+                    </div>
+                `;
+
+                keys.forEach(key => {
+                    const row = document.createElement('div');
+                    row.className = 'memory-table-row';
+                    const value = context[key];
+                    const displayValue = typeof value === 'object' ? JSON.stringify(value) : value;
+                    row.innerHTML = `
+                        <div><strong>${key}</strong></div>
+                        <div>${displayValue}</div>
+                    `;
+                    table.appendChild(row);
+                });
+
+                container.appendChild(table);
+            }
+
+            container.style.display = 'block';
+        }
+    } catch (error) {
+        alert('❌ Ошибка: ' + error.message);
+    }
+});
+
+// Очистка контекста
+document.getElementById('btnClearContext').addEventListener('click', async () => {
+    if (!confirm('Очистить весь контекст текущей сессии?')) return;
+
+    try {
+        const response = await fetch('/memory/context', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({})
+        });
+
+        const data = await response.json();
+
+        if (data.status === 'ok') {
+            alert('✅ Контекст очищен');
+            document.getElementById('contextContainer').innerHTML = '';
+            document.getElementById('contextContainer').style.display = 'none';
+            loadMemoryStats();
+        } else {
+            alert('❌ Ошибка: ' + (data.error || 'Неизвестная ошибка'));
+        }
+    } catch (error) {
+        alert('❌ Ошибка: ' + error.message);
+    }
+});
+
+// ==================== ВОССТАНОВЛЕНИЕ ИСТОРИИ ПРИ ЗАГРУЗКЕ (ДЕНЬ 9) ====================
+
+/**
+ * Загружает историю чата из сервера и отображает в UI
+ * @returns {Promise<boolean>} true если история была загружена, false если пуста
+ */
+async function loadChatHistory() {
+    try {
+        const response = await fetch('/get_chat_history');
+        const data = await response.json();
+
+        if (data.status === 'ok' && data.history && data.history.length > 0) {
+            console.log(`📚 Загружено ${data.history.length} сообщений чата`);
+
+            // Очищаем текущие сообщения в UI
+            chatMessages.innerHTML = '';
+
+            // Добавляем все сообщения из истории
+            data.history.forEach(msg => {
+                addMessage(msg.text, msg.role === 'user');
+            });
+
+            return true;
+        } else {
+            console.log('📭 История чата пуста');
+            return false;
+        }
+    } catch (error) {
+        console.error('Ошибка загрузки истории чата:', error);
+        return false;
+    }
+}
+
+/**
+ * Загружает историю рекомендаций из сервера
+ * @returns {Promise<boolean>} true если история была загружена, false если пуста
+ */
+async function loadRecommendationHistory() {
+    try {
+        const response = await fetch('/get_recommendation_history');
+        const data = await response.json();
+
+        if (data.status === 'ok' && data.history && data.history.length > 0) {
+            console.log(`📚 Загружено ${data.history.length} сообщений рекомендаций`);
+
+            // Очищаем и добавляем сообщения
+            chatMessages.innerHTML = '';
+            data.history.forEach(msg => {
+                addMessage(msg.text, msg.role === 'user');
+            });
+
+            return true;
+        } else {
+            console.log('📭 История рекомендаций пуста');
+            return false;
+        }
+    } catch (error) {
+        console.error('Ошибка загрузки истории рекомендаций:', error);
+        return false;
+    }
+}
+
+/**
+ * Инициализация при загрузке страницы
+ */
+document.addEventListener('DOMContentLoaded', async () => {
+    console.log('🚀 Инициализация AgentSmith...');
+
+    // Загружаем историю в зависимости от текущего режима
+    if (currentMode === 'info') {
+        await loadChatHistory();
+    } else if (currentMode === 'recommend') {
+        await loadRecommendationHistory();
+    } else if (currentMode === 'reasoning') {
+        await loadReasoningHistory();
+    }
+
+    console.log('✅ Инициализация завершена');
+});
 
