@@ -99,10 +99,18 @@ function displayMcpTools(tools) {
 
 // Открыть модальное окно вызова инструмента
 function openToolModal(toolName) {
+    console.log('🪟 openToolModal вызвана с toolName:', toolName);
+
     const tool = mcpTools.find(t => t.name === toolName);
-    if (!tool) return;
+    console.log('🔧 Найден инструмент:', tool);
+
+    if (!tool) {
+        console.error('❌ Инструмент не найден!');
+        return;
+    }
 
     currentTool = tool;
+    console.log('✅ currentTool установлен:', currentTool.name);
 
     const modal = document.getElementById('mcpModal');
     const modalTitle = document.getElementById('mcpModalTitle');
@@ -118,6 +126,8 @@ function openToolModal(toolName) {
     const params = tool.inputSchema?.properties || {};
     const required = tool.inputSchema?.required || [];
 
+    console.log('📋 Параметры инструмента:', Object.keys(params));
+
     toolForm.innerHTML = Object.keys(params).map(paramName => {
         const param = params[paramName];
         const isRequired = required.includes(paramName);
@@ -126,6 +136,7 @@ function openToolModal(toolName) {
     }).join('');
 
     modal.style.display = 'flex';
+    console.log('✅ Модальное окно открыто');
 }
 
 // Создать поле формы
@@ -219,17 +230,28 @@ window.openToolModal = openToolModal;
 
 // Вызвать инструмент
 async function callMcpTool() {
-    if (!currentTool) return;
+    console.log('🔧 callMcpTool вызвана');
+    console.log('currentTool:', currentTool);
+
+    if (!currentTool) {
+        console.error('❌ currentTool пустой!');
+        return;
+    }
 
     const form = document.getElementById('mcpToolForm');
+    console.log('📋 Форма найдена:', form);
+
     const formData = new FormData(form.querySelector('form') || form);
     const arguments = {};
 
     // Собираем аргументы из формы
     const inputs = form.querySelectorAll('input, select, textarea');
+    console.log('📝 Найдено полей:', inputs.length);
+
     inputs.forEach(input => {
         const name = input.name;
         let value = input.value.trim();
+        console.log(`  - ${name}: "${value}"`);
 
         if (value === '') {
             // Пропускаем пустые необязательные поля
@@ -256,12 +278,15 @@ async function callMcpTool() {
         }
     });
 
+    console.log('📦 Аргументы:', arguments);
+
     // Отправляем запрос
     const callBtn = document.getElementById('mcpCallTool');
     callBtn.disabled = true;
     callBtn.textContent = '⏳ Выполнение...';
 
     try {
+        console.log('🌐 Отправка запроса к /mcp/call_tool');
         const response = await fetch('/mcp/call_tool', {
             method: 'POST',
             headers: {
@@ -273,11 +298,14 @@ async function callMcpTool() {
             })
         });
 
+        console.log('📡 Ответ получен:', response.status);
         const data = await response.json();
+        console.log('📊 Данные:', data);
+
         displayToolResult(data);
         closeToolModal();
     } catch (error) {
-        console.error('Ошибка вызова инструмента:', error);
+        console.error('❌ Ошибка вызова инструмента:', error);
         alert('Ошибка вызова инструмента: ' + error.message);
     } finally {
         callBtn.disabled = false;
@@ -353,7 +381,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Вызов инструмента
     const callBtn = document.getElementById('mcpCallTool');
+    console.log('🔍 Поиск кнопки mcpCallTool:', callBtn);
     if (callBtn) {
         callBtn.addEventListener('click', callMcpTool);
+        console.log('✅ Обработчик click добавлен для кнопки Выполнить');
+    } else {
+        console.error('❌ Кнопка mcpCallTool не найдена!');
     }
 });
