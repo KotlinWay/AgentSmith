@@ -860,15 +860,41 @@ def clear_recommendations():
     return jsonify({'status': 'ok'})
 
 
+@app.route('/get_reasoning_history', methods=['GET'])
+def get_reasoning_history():
+    """Получить историю рассуждений"""
+    return jsonify({
+        'status': 'ok',
+        'history': reasoning_history
+    })
+
+
+@app.route('/clear_reasoning', methods=['POST'])
+def clear_reasoning():
+    """Очистка истории рассуждений"""
+    global reasoning_history
+    reasoning_history = []
+    return jsonify({'status': 'ok'})
+
+
 @app.route('/reasoning', methods=['POST'])
 def reasoning():
     """Решение задачи разными способами рассуждения"""
+    global reasoning_history
+
     data = request.json
     task = data.get('task', '').strip()
     method = data.get('method', 'all')  # all, direct, step_by_step, prompt_generator, expert_panel
 
     if not task:
         return jsonify({'error': 'Задача не указана'}), 400
+
+    # Сохраняем задачу в историю рассуждений
+    reasoning_history.append({
+        "role": "user",
+        "text": task,
+        "method": method
+    })
 
     # ДЕНЬ 9: Сохраняем вопрос в память
     user_tokens = estimate_tokens(task)
@@ -888,6 +914,14 @@ def reasoning():
 
         if method == 'all' or method == 'expert_panel':
             results['expert_panel'] = solve_with_expert_panel(task)
+
+        # Сохраняем результаты в историю рассуждений
+        reasoning_history.append({
+            "role": "assistant",
+            "text": json.dumps(results, ensure_ascii=False),
+            "method": method,
+            "task": task
+        })
 
         # ДЕНЬ 9: Сохраняем результаты в память
         results_summary = f"Метод: {method}, Результаты получены"
@@ -1944,7 +1978,7 @@ def restore_session_history():
     Восстанавливает историю диалога из базы данных при запуске.
     Загружает последние сообщения текущей сессии обратно в память приложения.
     """
-    global chat_history, recommendation_history
+    global chat_history, recommendation_history, reasoning_history
 
     try:
         # Получаем последние 50 сообщений из текущей сессии
@@ -1953,26 +1987,64 @@ def restore_session_history():
         if messages:
             print(f"📚 Восстановлено {len(messages)} сообщений из БД")
 
-            # Восстанавливаем в chat_history
+            # Счетчики для статистики
+            chat_count = 0
+            recommendation_count = 0
+            reasoning_count = 0
+
+            # Восстанавливаем в соответствующие истории
             for msg in messages:
                 # Определяем тип сообщения по префиксу
                 content = msg['content']
 
                 if content.startswith('[Рассуждение]'):
-                    # Это сообщение из режима рассуждения - не восстанавливаем в UI
-                    continue
+                    # Это сообщение из режима рассуждения
+                    text = content.replace('[Рассуждение] ', '')
+
+                    # Для user-сообщений - это задача
+                    if msg['role'] == 'user':
+                        reasoning_history.append({
+                            "role": "user",
+                            "text": text,
+                            "method": "all"  # По умолчанию, точный метод восстановить не можем
+                        })
+                    # Для assistant-сообщений - краткое описание результатов
+                    else:
+                        # Извлекаем метод из текста "Метод: {method}, ..."
+                        method_match = re.search(r'Метод:\s*(\w+)', text)
+                        method = method_match.group(1) if method_match else 'all'
+
+                        reasoning_history.append({
+                            "role": "assistant",
+                            "text": text,
+                            "method": method,
+                            "restored": True  # Пометка, что это восстановленные данные
+                        })
+                    reasoning_count += 1
+
                 elif content.startswith('[Рекомендация]'):
                     # Это сообщение из режима рекомендаций
                     recommendation_history.append({
                         "role": msg['role'],
                         "text": content.replace('[Рекомендация] ', '')
                     })
+                    recommendation_count += 1
+
                 else:
                     # Обычное сообщение чата
                     chat_history.append({
                         "role": msg['role'],
                         "text": content
                     })
+                    chat_count += 1
+
+            # Выводим статистику восстановления
+            if chat_count > 0:
+                print(f"   💬 Чат: {chat_count} сообщений")
+            if recommendation_count > 0:
+                print(f"   🎯 Рекомендации: {recommendation_count} сообщений")
+            if reasoning_count > 0:
+                print(f"   🧠 Рассуждения: {reasoning_count} сообщений")
         else:
             print("📭 Нет сохраненных сообщений в текущей сессии")
 

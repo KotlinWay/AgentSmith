@@ -357,6 +357,14 @@ async function solveTask(method) {
 
         if (response.ok) {
             displayReasoningResults(data);
+
+            // Очищаем поле ввода после успешного решения
+            taskInput.value = '';
+
+            // Через 3 секунды показываем полную историю с новым результатом
+            setTimeout(() => {
+                loadReasoningHistory();
+            }, 3000);
         } else {
             reasoningResults.innerHTML = `<div class="error">Ошибка: ${data.error || 'Неизвестная ошибка'}</div>`;
         }
@@ -394,6 +402,110 @@ function displayReasoningResults(data) {
     html += '</div>';
 
     reasoningResults.innerHTML = html;
+}
+
+async function loadReasoningHistory() {
+    try {
+        const response = await fetch('/get_reasoning_history');
+        const data = await response.json();
+
+        if (data.status === 'ok' && data.history && data.history.length > 0) {
+            let html = '<div class="reasoning-history">';
+            html += '<div class="history-header">';
+            html += '<h3>📚 История рассуждений</h3>';
+            html += '<button onclick="clearReasoningHistory()" class="clear-btn">🗑️ Очистить историю</button>';
+            html += '</div>';
+
+            const methodNames = {
+                'all': 'Все методы',
+                'direct': '1️⃣ Прямой ответ',
+                'step_by_step': '2️⃣ Пошаговое решение',
+                'prompt_generator': '3️⃣ С промптом от ИИ',
+                'expert_panel': '4️⃣ Группа экспертов'
+            };
+
+            // Группируем сообщения по парам (вопрос + ответ)
+            for (let i = 0; i < data.history.length; i++) {
+                const msg = data.history[i];
+
+                if (msg.role === 'user') {
+                    html += '<div class="history-item">';
+                    html += '<div class="history-question">';
+                    html += `<strong>🧠 Задача:</strong> ${escapeHtml(msg.text)}`;
+                    html += `<br><small>Метод: ${methodNames[msg.method] || msg.method}</small>`;
+                    html += '</div>';
+
+                    // Проверяем, есть ли следующее сообщение от assistant
+                    if (i + 1 < data.history.length && data.history[i + 1].role === 'assistant') {
+                        i++; // Пропускаем следующее сообщение
+                        const answer = data.history[i];
+
+                        if (answer.restored) {
+                            // Восстановленные данные - показываем краткое описание
+                            html += '<div class="history-answer">';
+                            html += `<strong>✅ Результат:</strong> ${escapeHtml(answer.text)}`;
+                            html += '<br><small style="color: #888;">Результаты получены (восстановлено из БД)</small>';
+                            html += '</div>';
+                        } else {
+                            // Полные результаты доступны
+                            try {
+                                const results = JSON.parse(answer.text);
+                                html += '<div class="history-answer">';
+                                html += '<strong>✅ Результаты:</strong>';
+                                html += '<div class="results-summary">';
+
+                                for (const [method, result] of Object.entries(results)) {
+                                    html += `<div class="result-summary-item">`;
+                                    html += `<strong>${methodNames[method] || method}:</strong>`;
+                                    html += `<pre>${escapeHtml(result.substring(0, 200))}${result.length > 200 ? '...' : ''}</pre>`;
+                                    html += '</div>';
+                                }
+
+                                html += '</div>';
+                                html += '</div>';
+                            } catch (e) {
+                                // Если не удалось распарсить JSON
+                                html += '<div class="history-answer">';
+                                html += `<strong>✅ Результат:</strong> ${escapeHtml(answer.text)}`;
+                                html += '</div>';
+                            }
+                        }
+                    }
+
+                    html += '</div>'; // .history-item
+                }
+            }
+
+            html += '</div>';
+            reasoningResults.innerHTML = html;
+        } else {
+            reasoningResults.innerHTML = '<div class="empty-history">📭 История рассуждений пуста. Задайте первую задачу!</div>';
+        }
+    } catch (error) {
+        console.error('Ошибка загрузки истории рассуждений:', error);
+        reasoningResults.innerHTML = '<div class="empty-history">📭 История рассуждений пуста</div>';
+    }
+}
+
+async function clearReasoningHistory() {
+    if (confirm('Вы уверены, что хотите очистить всю историю рассуждений?')) {
+        try {
+            const response = await fetch('/clear_reasoning', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            const data = await response.json();
+            if (data.status === 'ok') {
+                reasoningResults.innerHTML = '<div class="empty-history">📭 История рассуждений пуста. Задайте первую задачу!</div>';
+            }
+        } catch (error) {
+            console.error('Ошибка очистки истории:', error);
+            alert('Ошибка при очистке истории');
+        }
+    }
 }
 
 async function runTemperatureExperiment() {
@@ -1085,7 +1197,8 @@ function switchMode(mode) {
             comparisonContainer.style.display = 'none';
         }
         if (reasoningResults) {
-            reasoningResults.innerHTML = '';
+            // Загружаем историю рассуждений вместо очистки
+            loadReasoningHistory();
         }
         if (taskInput) {
             taskInput.value = '';
