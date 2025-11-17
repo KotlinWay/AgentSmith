@@ -1320,23 +1320,31 @@ function switchMode(mode) {
             memoryContainer.style.display = 'none';
         }
 
-        // Очищаем чат и показываем приветственное сообщение
+        // ДЕНЬ 9: Загружаем историю вместо очистки
         if (mode === 'info') {
-            chatMessages.innerHTML = `
-                <div class="message assistant">
-                    <div class="message-content">Привет! Я агент Смит, твой справочник по фильмам. Введи название фильма.</div>
-                </div>
-            `;
-            // Очищаем историю на сервере
-            fetch('/clear', { method: 'POST' }).catch(console.error);
+            // Загружаем историю чата
+            loadChatHistory().then(hasHistory => {
+                // Если истории нет, показываем приветственное сообщение
+                if (!hasHistory) {
+                    chatMessages.innerHTML = `
+                        <div class="message assistant">
+                            <div class="message-content">Привет! Я агент Смит, твой справочник по фильмам. Введи название фильма.</div>
+                        </div>
+                    `;
+                }
+            });
         } else if (mode === 'recommend') {
-            chatMessages.innerHTML = `
-                <div class="message assistant">
-                    <div class="message-content">Привет! Я помогу тебе подобрать идеальный фильм. Расскажи, что тебе нравится, в какой компании будешь смотреть и какое у тебя настроение? 🎬</div>
-                </div>
-            `;
-            // Очищаем историю рекомендаций на сервере
-            fetch('/clear_recommendations', { method: 'POST' }).catch(console.error);
+            // Загружаем историю рекомендаций
+            loadRecommendationHistory().then(hasHistory => {
+                // Если истории нет, показываем приветственное сообщение
+                if (!hasHistory) {
+                    chatMessages.innerHTML = `
+                        <div class="message assistant">
+                            <div class="message-content">Привет! Я помогу тебе подобрать идеальный фильм. Расскажи, что тебе нравится, в какой компании будешь смотреть и какое у тебя настроение? 🎬</div>
+                        </div>
+                    `;
+                }
+            });
         }
     }
 }
@@ -2199,5 +2207,85 @@ document.getElementById('btnClearContext').addEventListener('click', async () =>
     } catch (error) {
         alert('❌ Ошибка: ' + error.message);
     }
+});
+
+// ==================== ВОССТАНОВЛЕНИЕ ИСТОРИИ ПРИ ЗАГРУЗКЕ (ДЕНЬ 9) ====================
+
+/**
+ * Загружает историю чата из сервера и отображает в UI
+ * @returns {Promise<boolean>} true если история была загружена, false если пуста
+ */
+async function loadChatHistory() {
+    try {
+        const response = await fetch('/get_chat_history');
+        const data = await response.json();
+
+        if (data.status === 'ok' && data.history && data.history.length > 0) {
+            console.log(`📚 Загружено ${data.history.length} сообщений чата`);
+
+            // Очищаем текущие сообщения в UI
+            chatMessages.innerHTML = '';
+
+            // Добавляем все сообщения из истории
+            data.history.forEach(msg => {
+                addMessage(msg.text, msg.role === 'user');
+            });
+
+            return true;
+        } else {
+            console.log('📭 История чата пуста');
+            return false;
+        }
+    } catch (error) {
+        console.error('Ошибка загрузки истории чата:', error);
+        return false;
+    }
+}
+
+/**
+ * Загружает историю рекомендаций из сервера
+ * @returns {Promise<boolean>} true если история была загружена, false если пуста
+ */
+async function loadRecommendationHistory() {
+    try {
+        const response = await fetch('/get_recommendation_history');
+        const data = await response.json();
+
+        if (data.status === 'ok' && data.history && data.history.length > 0) {
+            console.log(`📚 Загружено ${data.history.length} сообщений рекомендаций`);
+
+            // Очищаем и добавляем сообщения
+            chatMessages.innerHTML = '';
+            data.history.forEach(msg => {
+                addMessage(msg.text, msg.role === 'user');
+            });
+
+            return true;
+        } else {
+            console.log('📭 История рекомендаций пуста');
+            return false;
+        }
+    } catch (error) {
+        console.error('Ошибка загрузки истории рекомендаций:', error);
+        return false;
+    }
+}
+
+/**
+ * Инициализация при загрузке страницы
+ */
+document.addEventListener('DOMContentLoaded', async () => {
+    console.log('🚀 Инициализация AgentSmith...');
+
+    // Загружаем историю в зависимости от текущего режима
+    if (currentMode === 'info') {
+        await loadChatHistory();
+    } else if (currentMode === 'recommend') {
+        await loadRecommendationHistory();
+    } else if (currentMode === 'reasoning') {
+        await loadReasoningHistory();
+    }
+
+    console.log('✅ Инициализация завершена');
 });
 

@@ -852,6 +852,24 @@ def clear_history():
     return jsonify({'status': 'ok'})
 
 
+@app.route('/get_chat_history', methods=['GET'])
+def get_chat_history():
+    """Получить историю обычного чата (режим Справочника)"""
+    return jsonify({
+        'status': 'ok',
+        'history': chat_history
+    })
+
+
+@app.route('/get_recommendation_history', methods=['GET'])
+def get_recommendation_history():
+    """Получить историю рекомендаций"""
+    return jsonify({
+        'status': 'ok',
+        'history': recommendation_history
+    })
+
+
 @app.route('/clear_recommendations', methods=['POST'])
 def clear_recommendations():
     """Очистка истории рекомендаций"""
