@@ -214,6 +214,9 @@ function closeToolModal() {
     currentTool = null;
 }
 
+// Делаем функцию глобально доступной для onclick
+window.openToolModal = openToolModal;
+
 // Вызвать инструмент
 async function callMcpTool() {
     if (!currentTool) return;
