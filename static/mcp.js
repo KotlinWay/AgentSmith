@@ -6,6 +6,7 @@
 // Глобальное хранилище инструментов
 let mcpTools = [];
 let currentTool = null;
+let currentServer = 'github'; // по умолчанию GitHub
 
 // Иконки для инструментов
 const toolIcons = {
@@ -14,6 +15,23 @@ const toolIcons = {
     'text_analyzer': '📊',
     'json_formatter': '📋',
     'weather_info': '🌤️',
+    // GitHub tools
+    'create_or_update_file': '📝',
+    'push_files': '⬆️',
+    'create_repository': '📦',
+    'get_file_contents': '📄',
+    'create_issue': '🐛',
+    'create_pull_request': '🔀',
+    'fork_repository': '🍴',
+    'create_branch': '🌿',
+    'list_commits': '📜',
+    'search_repositories': '🔍',
+    'search_code': '🔎',
+    'search_issues': '🔍',
+    'search_users': '👤',
+    'get_issue': '📋',
+    'update_issue': '✏️',
+    'add_issue_comment': '💬',
     'default': '🔧'
 };
 
@@ -27,18 +45,23 @@ async function loadMcpTools() {
     const loadBtn = document.getElementById('loadMcpTools');
     const toolsGrid = document.getElementById('mcpToolsGrid');
     const toolsCount = document.getElementById('mcpToolsCount');
+    const serverSelect = document.getElementById('mcpServerType');
+
+    currentServer = serverSelect.value;
 
     loadBtn.disabled = true;
     loadBtn.textContent = '⏳ Загрузка...';
 
     try {
-        const response = await fetch('/mcp/tools');
+        // Выбираем endpoint в зависимости от сервера
+        const endpoint = currentServer === 'github' ? '/mcp/github/tools' : '/mcp/tools';
+        const response = await fetch(endpoint);
         const data = await response.json();
 
         if (data.status === 'ok') {
             mcpTools = data.tools;
             displayMcpTools(mcpTools);
-            toolsCount.textContent = `${data.count} инструментов`;
+            toolsCount.textContent = `${data.count} инструментов (${data.server === 'github' ? 'GitHub' : 'Local'})`;
         } else {
             throw new Error(data.error || 'Ошибка загрузки инструментов');
         }
@@ -48,6 +71,7 @@ async function loadMcpTools() {
             <div class="mcp-placeholder">
                 <p style="color: #dc3545;">❌ Ошибка загрузки: ${error.message}</p>
                 <p>Убедитесь, что MCP сервер запущен и доступен</p>
+                ${currentServer === 'github' ? '<p>Проверьте, что GitHub токен действителен</p>' : ''}
             </div>
         `;
     } finally {
@@ -286,8 +310,11 @@ async function callMcpTool() {
     callBtn.textContent = '⏳ Выполнение...';
 
     try {
-        console.log('🌐 Отправка запроса к /mcp/call_tool');
-        const response = await fetch('/mcp/call_tool', {
+        // Выбираем endpoint в зависимости от сервера
+        const endpoint = currentServer === 'github' ? '/mcp/github/call_tool' : '/mcp/call_tool';
+        console.log('🌐 Отправка запроса к', endpoint);
+
+        const response = await fetch(endpoint, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
