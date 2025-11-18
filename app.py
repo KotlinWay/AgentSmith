@@ -7,6 +7,7 @@ import time
 from typing import Dict, Any
 from memory_service import MemoryService
 from mcp_service import mcp_service
+from github_mcp_service import GitHubMCPService
 import uuid
 from datetime import datetime
 
@@ -14,6 +15,26 @@ app = Flask(__name__)
 
 # Инициализация сервиса внешней памяти (День 9)
 memory = MemoryService("agent_memory.db")
+# Загрузка конфигурации
+def load_config():
+    if os.path.exists('config.json'):
+        with open('config.json', 'r', encoding='utf-8') as f:
+            return json.load(f)
+    else:
+        raise FileNotFoundError("config.json не найден! Создай его на основе config.example.json")
+
+config = load_config()
+
+# Инициализация GitHub MCP сервиса (День 10)
+# GitHub токен можно установить через переменную окружения GITHUB_TOKEN
+# или добавить в config.json
+GITHUB_TOKEN = os.environ.get('GITHUB_TOKEN', config.get('github_token', ''))
+if GITHUB_TOKEN:
+    github_mcp_service = GitHubMCPService(GITHUB_TOKEN)
+else:
+    print("⚠️ GitHub токен не установлен. GitHub MCP будет недоступен.")
+    print("   Установите переменную окружения GITHUB_TOKEN или добавьте github_token в config.json")
+    github_mcp_service = None
 
 # Текущая сессия - попытка загрузить последнюю или создать новую
 def get_or_create_session():
@@ -30,15 +51,7 @@ def get_or_create_session():
 
 current_session_id = get_or_create_session()
 
-# Загрузка конфигурации
-def load_config():
-    if os.path.exists('config.json'):
-        with open('config.json', 'r', encoding='utf-8') as f:
-            return json.load(f)
-    else:
-        raise FileNotFoundError("config.json не найден! Создай его на основе config.example.json")
 
-config = load_config()
 
 # История диалога
 chat_history = []
@@ -2114,13 +2127,38 @@ def restore_session_history():
 
 @app.route('/mcp/tools', methods=['GET'])
 def get_mcp_tools():
-    """Получить список доступных MCP инструментов"""
+    """Получить список доступных MCP инструментов (локальный сервер)"""
     try:
         tools = mcp_service.get_tools()
         return jsonify({
             'status': 'ok',
             'count': len(tools),
-            'tools': tools
+            'tools': tools,
+            'server': 'local'
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'error': str(e)
+        }), 500
+
+
+@app.route('/mcp/github/tools', methods=['GET'])
+def get_github_mcp_tools():
+    """Получить список доступных инструментов GitHub MCP"""
+    if not github_mcp_service:
+        return jsonify({
+            'status': 'error',
+            'error': 'GitHub MCP не настроен. Установите GITHUB_TOKEN'
+        }), 503
+
+    try:
+        tools = github_mcp_service.get_tools()
+        return jsonify({
+            'status': 'ok',
+            'count': len(tools),
+            'tools': tools,
+            'server': 'github'
         })
     except Exception as e:
         return jsonify({
@@ -2131,7 +2169,7 @@ def get_mcp_tools():
 
 @app.route('/mcp/call_tool', methods=['POST'])
 def call_mcp_tool():
-    """Вызвать MCP инструмент"""
+    """Вызвать MCP инструмент (локальный сервер)"""
     data = request.json
     tool_name = data.get('tool_name')
     arguments = data.get('arguments', {})
@@ -2159,6 +2197,54 @@ def call_mcp_tool():
                 current_session_id,
                 "assistant",
                 f"[MCP] Результат {tool_name}: {result_text}",
+                estimate_tokens(result_text)
+            )
+
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'error': str(e),
+            'success': False
+        }), 500
+
+
+@app.route('/mcp/github/call_tool', methods=['POST'])
+def call_github_mcp_tool():
+    """Вызвать инструмент GitHub MCP"""
+    if not github_mcp_service:
+        return jsonify({
+            'status': 'error',
+            'error': 'GitHub MCP не настроен. Установите GITHUB_TOKEN'
+        }), 503
+
+    data = request.json
+    tool_name = data.get('tool_name')
+    arguments = data.get('arguments', {})
+
+    if not tool_name:
+        return jsonify({
+            'status': 'error',
+            'error': 'tool_name обязателен'
+        }), 400
+
+    try:
+        result = github_mcp_service.call_tool(tool_name, arguments)
+
+        # Сохраняем в память (опционально)
+        if result.get('success'):
+            memory.save_message(
+                current_session_id,
+                "user",
+                f"[GitHub MCP] Вызов {tool_name}: {json.dumps(arguments, ensure_ascii=False)}",
+                estimate_tokens(str(arguments))
+            )
+
+            result_text = '\n'.join([c['text'] for c in result.get('content', [])])
+            memory.save_message(
+                current_session_id,
+                "assistant",
+                f"[GitHub MCP] Результат {tool_name}: {result_text}",
                 estimate_tokens(result_text)
             )
 
